@@ -1,7 +1,7 @@
 import os
 import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
-from PIL import Image, ImageTk
+from tkinter import filedialog, ttk, messagebox, colorchooser
+from PIL import Image, ImageTk, ImageDraw, ImageFont
 import glob
 import sys
 
@@ -10,8 +10,8 @@ class ImageProcessorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("图片处理器")
-        self.root.geometry("1000x600")
-        self.root.minsize(900, 600)
+        self.root.geometry("1000x750")
+        self.root.minsize(900, 700)
 
         # 确保中文显示正常
         self.style = ttk.Style()
@@ -36,6 +36,23 @@ class ImageProcessorApp:
         self.target_height = tk.IntVar(value=600)
         self.resize_percentage = tk.IntVar(value=100)
 
+        # 水印设置
+        self.watermark_type = tk.StringVar(value="none")  # none:无水印, text:文本水印, image:图片水印
+        # 1. 文本水印参数
+        self.watermark_text = tk.StringVar(value="© 版权所有")  # 默认文本
+        self.watermark_font_family = tk.StringVar(value="SimHei")  # 默认字体
+        self.watermark_font_size = tk.IntVar(value=24)  # 默认字号
+        self.watermark_font_bold = tk.BooleanVar(value=False)  # 粗体
+        self.watermark_font_italic = tk.BooleanVar(value=False)  # 斜体
+        self.watermark_text_color = tk.StringVar(value="#000000")  # 默认黑色
+        self.watermark_text_opacity = tk.IntVar(value=50)  # 文本透明度(0-100)
+        self.watermark_text_shadow = tk.BooleanVar(value=True)  # 阴影效果
+        # 2. 图片水印参数
+        self.watermark_image_path = tk.StringVar(value="")  # 水印图片路径
+        self.watermark_image_obj = None  # 加载的水印图片对象
+        self.watermark_image_scale = tk.IntVar(value=50)  # 图片缩放比例(0-200)
+        self.watermark_image_opacity = tk.IntVar(value=50)  # 图片透明度(0-100)
+
         # 创建界面
         self.create_widgets()
 
@@ -47,9 +64,30 @@ class ImageProcessorApp:
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
-        # 左侧控制区
-        control_frame = ttk.LabelFrame(main_frame, text="操作", padding="10")
-        control_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+        # 左侧带滚动条的控制区容器
+        control_container = ttk.Frame(main_frame)
+        control_container.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+
+        # 控制区滚动条
+        control_scrollbar = ttk.Scrollbar(control_container, orient=tk.VERTICAL)
+        control_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 左侧控制区（放在Canvas内实现滚动）
+        self.control_canvas = tk.Canvas(control_container, yscrollcommand=control_scrollbar.set)
+        self.control_canvas.pack(side=tk.LEFT, fill=tk.Y)
+        control_scrollbar.config(command=self.control_canvas.yview)
+
+        # 控制区内容框架
+        control_frame = ttk.LabelFrame(self.control_canvas, text="操作", padding="10")
+        control_frame_window = self.control_canvas.create_window((0, 0), window=control_frame, anchor="nw")
+
+        # 绑定事件以调整滚动区域
+        control_frame.bind("<Configure>", lambda e: self.control_canvas.configure(
+            scrollregion=self.control_canvas.bbox("all")
+        ))
+        self.control_canvas.bind("<Configure>", lambda e: self.control_canvas.itemconfig(
+            control_frame_window, width=e.width
+        ))
 
         # 导入按钮
         ttk.Button(control_frame, text="导入单张图片", command=self.import_single_image).pack(fill=tk.X, pady=(0, 5))
@@ -137,8 +175,94 @@ class ImageProcessorApp:
 
         self.update_resize_fields_state()  # 初始状态设置
 
+        # 水印设置框架
+        watermark_frame = ttk.LabelFrame(control_frame, text="水印设置", padding="10")
+        watermark_frame.pack(fill=tk.X, pady=(0, 15))
+
+        # 1. 水印类型选择
+        ttk.Label(watermark_frame, text="水印类型:").pack(anchor=tk.W, pady=(0, 5))
+        type_frame = ttk.Frame(watermark_frame)
+        type_frame.pack(fill=tk.X, pady=(0, 10))
+        ttk.Radiobutton(type_frame, text="无水印", variable=self.watermark_type, value="none",
+                        command=self.update_watermark_fields).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(type_frame, text="文本水印", variable=self.watermark_type, value="text",
+                        command=self.update_watermark_fields).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(type_frame, text="图片水印", variable=self.watermark_type, value="image",
+                        command=self.update_watermark_fields).pack(side=tk.LEFT, padx=5)
+
+        # 2. 文本水印设置（默认隐藏）
+        self.text_watermark_subframe = ttk.Frame(watermark_frame, padding="5 0 0 0")
+        # 文本内容
+        ttk.Label(self.text_watermark_subframe, text="水印文本:").pack(anchor=tk.W, pady=(0, 2))
+        ttk.Entry(self.text_watermark_subframe, textvariable=self.watermark_text).pack(fill=tk.X, pady=(0, 5))
+        # 字体设置（家族+字号）
+        font_frame = ttk.Frame(self.text_watermark_subframe)
+        ttk.Label(font_frame, text="字体:").pack(side=tk.LEFT, padx=(0, 5))
+        # 加载系统字体（过滤非中文字体）
+        import tkinter.font as tkFont
+        system_fonts = [font for font in tkFont.families() if
+                        any(u'\u4e00' <= c <= u'\u9fff' for c in font) or font in ["Arial", "Times New Roman"]]
+        ttk.Combobox(font_frame, textvariable=self.watermark_font_family, values=system_fonts, state="readonly").pack(
+            side=tk.LEFT, padx=5)
+        ttk.Label(font_frame, text="字号:").pack(side=tk.LEFT, padx=(10, 5))
+        ttk.Spinbox(font_frame, from_=8, to=72, textvariable=self.watermark_font_size, width=5).pack(side=tk.LEFT)
+        font_frame.pack(fill=tk.X, pady=(0, 5))
+        # 字体样式（粗体+斜体）
+        style_frame = ttk.Frame(self.text_watermark_subframe)
+        ttk.Checkbutton(style_frame, text="粗体", variable=self.watermark_font_bold).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(style_frame, text="斜体", variable=self.watermark_font_italic).pack(side=tk.LEFT, padx=5)
+        style_frame.pack(fill=tk.X, pady=(0, 5))
+        # 文本颜色（调色板）
+        color_frame = ttk.Frame(self.text_watermark_subframe)
+        ttk.Label(color_frame, text="文本颜色:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Entry(color_frame, textvariable=self.watermark_text_color, width=10).pack(side=tk.LEFT)
+        ttk.Button(color_frame, text="选择", command=self.pick_text_color).pack(side=tk.LEFT, padx=5)
+        color_frame.pack(fill=tk.X, pady=(0, 5))
+        # 透明度+阴影
+        opacity_frame = ttk.Frame(self.text_watermark_subframe)
+        ttk.Label(opacity_frame, text="透明度:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Scale(opacity_frame, from_=0, to=100, variable=self.watermark_text_opacity, orient=tk.HORIZONTAL,
+                  length=100).pack(side=tk.LEFT, padx=5)
+        ttk.Label(opacity_frame, textvariable=self.watermark_text_opacity).pack(side=tk.LEFT, padx=5)
+        ttk.Checkbutton(opacity_frame, text="阴影", variable=self.watermark_text_shadow).pack(side=tk.LEFT, padx=10)
+        opacity_frame.pack(fill=tk.X, pady=(0, 5))
+
+        # 3. 图片水印设置（默认隐藏）
+        self.image_watermark_subframe = ttk.Frame(watermark_frame, padding="5 0 0 0")
+        # 选择图片
+        img_path_frame = ttk.Frame(self.image_watermark_subframe)
+        ttk.Label(img_path_frame, text="水印图片:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Entry(img_path_frame, textvariable=self.watermark_image_path, state="readonly").pack(fill=tk.X,
+                                                                                                 side=tk.LEFT, padx=5)
+        ttk.Button(img_path_frame, text="选择", command=self.select_watermark_image).pack(side=tk.LEFT, padx=5)
+        img_path_frame.pack(fill=tk.X, pady=(0, 5))
+        # 图片预览（小尺寸）
+        self.watermark_preview_label = ttk.Label(self.image_watermark_subframe, text="未选择图片")
+        self.watermark_preview_label.pack(pady=(0, 5))
+        # 缩放比例+透明度
+        scale_frame = ttk.Frame(self.image_watermark_subframe)
+        ttk.Label(scale_frame, text="缩放:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Scale(scale_frame, from_=10, to=200, variable=self.watermark_image_scale, orient=tk.HORIZONTAL,
+                  length=100).pack(side=tk.LEFT, padx=5)
+        ttk.Label(scale_frame, textvariable=self.watermark_image_scale).pack(side=tk.LEFT, padx=5)
+        ttk.Label(scale_frame, text="%").pack(side=tk.LEFT)
+        scale_frame.pack(fill=tk.X, pady=(0, 5))
+        img_opacity_frame = ttk.Frame(self.image_watermark_subframe)
+        ttk.Label(img_opacity_frame, text="透明度:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Scale(img_opacity_frame, from_=0, to=100, variable=self.watermark_image_opacity, orient=tk.HORIZONTAL,
+                  length=100).pack(side=tk.LEFT, padx=5)
+        ttk.Label(img_opacity_frame, textvariable=self.watermark_image_opacity).pack(side=tk.LEFT, padx=5)
+        ttk.Label(img_opacity_frame, text="%").pack(side=tk.LEFT)
+        img_opacity_frame.pack(fill=tk.X, pady=(0, 5))
+
+        # 初始化水印字段状态
+        self.update_watermark_fields()
+
         ttk.Button(control_frame, text="导出选中图片", command=self.export_selected).pack(fill=tk.X, pady=(15, 5))
         ttk.Button(control_frame, text="导出所有图片", command=self.export_all).pack(fill=tk.X, pady=(0, 5))
+
+        # 添加一个占位元素，确保最后有足够空间
+        ttk.Label(control_frame, text="").pack(pady=10)
 
         # 右侧图片列表区
         image_frame = ttk.LabelFrame(main_frame, text="已导入图片", padding="10")
@@ -179,7 +303,7 @@ class ImageProcessorApp:
         state = tk.NORMAL if self.output_format.get().lower() == "jpeg" else tk.DISABLED
         # 只对支持state属性的控件设置状态
         self.quality_slider.configure(state=state)
-        # 标签不需要设置state，通过颜色区分是否可用
+        # 标签通过颜色区分是否可用
         if state == tk.DISABLED:
             self.quality_label_title.configure(foreground="#999999")
             self.quality_value_label.configure(foreground="#999999")
@@ -492,6 +616,137 @@ class ImageProcessorApp:
             messagebox.showerror("错误", f"调整图片尺寸失败: {str(e)}")
             return img.copy()
 
+    # 文本水印相关方法
+    def pick_text_color(self):
+        """打开颜色选择器选择文本颜色"""
+        color = colorchooser.askcolor(title="选择水印文本颜色", initialcolor=self.watermark_text_color.get())
+        if color[1]:  # color[1]是十六进制颜色码
+            self.watermark_text_color.set(color[1])
+
+    def get_watermark_font(self):
+        """根据设置生成字体对象参数"""
+        weight = "bold" if self.watermark_font_bold.get() else "normal"
+        slant = "italic" if self.watermark_font_italic.get() else "roman"
+        return (self.watermark_font_family.get(), self.watermark_font_size.get(), weight, slant)
+
+    def add_text_watermark(self, img):
+        """给图片添加文本水印（支持透明度、阴影）"""
+        img_copy = img.copy()
+        draw = ImageDraw.Draw(img_copy, mode="RGBA")
+        text = self.watermark_text.get()
+        if not text:
+            return img_copy  # 空文本不添加水印
+
+        # 1. 准备字体和颜色（带透明度）
+        try:
+            font = ImageFont.truetype(
+                font=self.watermark_font_family.get(),
+                size=self.watermark_font_size.get(),
+                weight="bold" if self.watermark_font_bold.get() else "normal"
+            )
+        except:
+            # 字体加载失败时使用默认字体
+            font = ImageFont.load_default()
+
+        # 解析颜色
+        hex_color = self.watermark_text_color.get().lstrip("#")
+        try:
+            r, g, b = tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+        except:
+            r, g, b = 0, 0, 0  # 默认黑色
+
+        opacity = int(self.watermark_text_opacity.get() * 2.55)  # 转0-255
+        text_color = (r, g, b, opacity)
+
+        # 2. 计算水印位置（右下角，距边缘20px）
+        img_width, img_height = img_copy.size
+        text_bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+        x = img_width - text_width - 20
+        y = img_height - text_height - 20
+
+        # 3. 添加阴影（可选）
+        if self.watermark_text_shadow.get():
+            shadow_color = (0, 0, 0, int(opacity * 0.3))  # 半透明黑色阴影
+            draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+
+        # 4. 添加文本水印
+        draw.text((x, y), text, font=font, fill=text_color)
+        return img_copy
+
+    # 图片水印相关方法
+    def select_watermark_image(self):
+        """选择水印图片（支持PNG透明通道）"""
+        img_path = filedialog.askopenfilename(
+            title="选择水印图片",
+            filetypes=[("图片文件", "*.png;*.jpg;*.jpeg;*.bmp"), ("所有文件", "*.*")]
+        )
+        if img_path:
+            self.watermark_image_path.set(img_path)
+            # 加载图片并预览
+            try:
+                with Image.open(img_path) as img:
+                    self.watermark_image_obj = img.copy()
+                    # 生成预览图（100x100缩略图）
+                    preview = img.copy()
+                    preview.thumbnail((100, 100))
+                    preview_photo = ImageTk.PhotoImage(preview)
+                    self.watermark_preview_label.config(image=preview_photo, text="")
+                    self.watermark_preview_label.image = preview_photo  # 防止GC回收
+            except Exception as e:
+                messagebox.showerror("错误", f"加载水印图片失败: {str(e)}")
+                self.watermark_image_path.set("")
+                self.watermark_image_obj = None
+
+    def add_image_watermark(self, img):
+        """给图片添加图片水印（支持缩放、透明度、透明通道）"""
+        if not self.watermark_image_obj:
+            return img.copy()  # 无水印图片时返回原图
+
+        img_copy = img.copy()
+        watermark = self.watermark_image_obj.copy()
+
+        # 1. 缩放水印图片
+        scale = self.watermark_image_scale.get() / 100
+        wm_width = int(watermark.width * scale)
+        wm_height = int(watermark.height * scale)
+        watermark = watermark.resize((wm_width, wm_height), Image.Resampling.LANCZOS)
+
+        # 2. 调整水印透明度
+        opacity = int(self.watermark_image_opacity.get() * 2.55)  # 转0-255
+        if watermark.mode != "RGBA":
+            watermark = watermark.convert("RGBA")
+        wm_data = watermark.getdata()
+        # 遍历每个像素调整透明度
+        new_wm_data = [(r, g, b, int(a * opacity / 255)) for r, g, b, a in wm_data]
+        watermark.putdata(new_wm_data)
+
+        # 3. 计算水印位置（右下角，距边缘20px）
+        img_width, img_height = img_copy.size
+        x = max(0, img_width - wm_width - 20)
+        y = max(0, img_height - wm_height - 20)
+
+        # 4. 叠加水印（保留PNG透明通道）
+        img_copy.paste(watermark, (x, y), watermark)  # 第三个参数是蒙版，保留透明
+        return img_copy
+
+    def update_watermark_fields(self):
+        """根据水印类型显示/隐藏对应设置项"""
+        watermark_type = self.watermark_type.get()
+        # 文本水印字段
+        if watermark_type == "text":
+            self.text_watermark_subframe.pack(fill=tk.X, pady=(0, 5))
+            self.image_watermark_subframe.pack_forget()
+        # 图片水印字段
+        elif watermark_type == "image":
+            self.image_watermark_subframe.pack(fill=tk.X, pady=(0, 5))
+            self.text_watermark_subframe.pack_forget()
+        # 无水印（隐藏所有）
+        else:
+            self.text_watermark_subframe.pack_forget()
+            self.image_watermark_subframe.pack_forget()
+
     def get_output_path(self, original_path):
         # 根据设置生成输出路径
         if not self.output_dir:
@@ -549,6 +804,11 @@ class ImageProcessorApp:
             messagebox.showinfo("提示", "请输入有效的缩放比例（1-1000%）")
             return
 
+        # 检查水印参数
+        if self.watermark_type.get() == "image" and not self.watermark_image_path.get():
+            messagebox.showinfo("提示", "请选择水印图片")
+            return
+
         # 获取选中的图片
         selected_frames = [frame for frame in self.images_container.winfo_children()
                            if hasattr(frame, 'checkbox_var') and frame.checkbox_var.get()]
@@ -566,20 +826,26 @@ class ImageProcessorApp:
                     output_path = self.get_output_path(path)
                     if output_path:
                         try:
-                            # 调整图片尺寸
+                            # 1. 先调整尺寸
                             resized_img = self.resize_image(img)
+                            # 2. 根据水印类型添加水印
+                            watermark_type = self.watermark_type.get()
+                            if watermark_type == "text":
+                                final_img = self.add_text_watermark(resized_img)
+                            elif watermark_type == "image":
+                                final_img = self.add_image_watermark(resized_img)
+                            else:
+                                final_img = resized_img  # 无水印
 
-                            # 保存图片（处理格式差异）
+                            # 3. 保存图片
                             if self.output_format.get().lower() == "jpeg":
-                                # JPEG不支持透明通道，转换为RGB（背景白色）
-                                if resized_img.mode in ('RGBA', 'LA'):
-                                    background = Image.new(resized_img.mode[:-1], resized_img.size, (255, 255, 255))
-                                    background.paste(resized_img, resized_img.split()[-1])  # 用透明通道作为蒙版
-                                    resized_img = background
-                                # 使用用户设置的质量值保存
-                                resized_img.save(output_path, "JPEG", quality=self.jpeg_quality.get())
+                                if final_img.mode in ('RGBA', 'LA'):
+                                    background = Image.new(final_img.mode[:-1], final_img.size, (255, 255, 255))
+                                    background.paste(final_img, final_img.split()[-1])
+                                    final_img = background
+                                final_img.save(output_path, "JPEG", quality=self.jpeg_quality.get())
                             else:  # PNG（保留透明通道）
-                                resized_img.save(output_path, "PNG")
+                                final_img.save(output_path, "PNG")
                             success_count += 1
                         except Exception as e:
                             messagebox.showerror("错误", f"导出 {file_name} 失败: {str(e)}")
@@ -597,6 +863,8 @@ class ImageProcessorApp:
         for frame in self.images_container.winfo_children():
             if hasattr(frame, 'checkbox_var'):
                 frame.checkbox_var.set(True)
+
+        # 调用导出选中图片的函数
         self.export_selected()
 
 
