@@ -10,8 +10,8 @@ class ImageProcessorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("图片处理器")
-        self.root.geometry("900x600")
-        self.root.minsize(800, 500)
+        self.root.geometry("1000x600")
+        self.root.minsize(900, 600)
 
         # 确保中文显示正常
         self.style = ttk.Style()
@@ -28,6 +28,13 @@ class ImageProcessorApp:
         self.naming_option = tk.StringVar(value="original")  # original, prefix, suffix
         self.custom_text = tk.StringVar(value="")
         self.output_format = tk.StringVar(value="png")
+        self.jpeg_quality = tk.IntVar(value=95)  # JPEG质量，0-100
+
+        # 尺寸调整设置
+        self.resize_method = tk.StringVar(value="none")  # none, width, height, percentage
+        self.target_width = tk.IntVar(value=800)
+        self.target_height = tk.IntVar(value=600)
+        self.resize_percentage = tk.IntVar(value=100)
 
         # 创建界面
         self.create_widgets()
@@ -71,10 +78,66 @@ class ImageProcessorApp:
         ttk.Label(export_frame, text="输出格式:").pack(anchor=tk.W, pady=(0, 5))
         format_frame = ttk.Frame(export_frame)
         format_frame.pack(fill=tk.X)
-        ttk.Radiobutton(format_frame, text="JPEG", variable=self.output_format, value="jpeg").pack(side=tk.LEFT)
-        ttk.Radiobutton(format_frame, text="PNG", variable=self.output_format, value="png").pack(side=tk.LEFT, padx=10)
+        ttk.Radiobutton(format_frame, text="JPEG", variable=self.output_format, value="jpeg",
+                        command=self.update_jpeg_quality_state).pack(side=tk.LEFT)
+        ttk.Radiobutton(format_frame, text="PNG", variable=self.output_format, value="png",
+                        command=self.update_jpeg_quality_state).pack(side=tk.LEFT, padx=10)
 
-        ttk.Button(control_frame, text="导出选中图片", command=self.export_selected).pack(fill=tk.X, pady=(0, 5))
+        # JPEG质量调节
+        self.jpeg_quality_frame = ttk.Frame(export_frame)
+        self.quality_label_title = ttk.Label(self.jpeg_quality_frame, text="JPEG质量:")
+        self.quality_label_title.pack(anchor=tk.W, pady=(5, 0))
+        quality_slider_frame = ttk.Frame(self.jpeg_quality_frame)
+        self.quality_slider = ttk.Scale(quality_slider_frame, from_=0, to=100,
+                                        variable=self.jpeg_quality, orient=tk.HORIZONTAL,
+                                        length=150, command=self.update_quality_label)
+        self.quality_slider.pack(side=tk.LEFT)
+        self.quality_value_label = ttk.Label(quality_slider_frame, text=f"{self.jpeg_quality.get()}%")
+        self.quality_value_label.pack(side=tk.LEFT, padx=5)
+        quality_slider_frame.pack(fill=tk.X, pady=(0, 5))
+        self.jpeg_quality_frame.pack(fill=tk.X, pady=(5, 10))
+        self.update_jpeg_quality_state()  # 初始状态设置
+
+        # 尺寸调整设置
+        resize_frame = ttk.LabelFrame(export_frame, text="尺寸调整")
+        resize_frame.pack(fill=tk.X, pady=(10, 0))
+
+        ttk.Radiobutton(resize_frame, text="不调整尺寸", variable=self.resize_method, value="none",
+                        command=self.update_resize_fields_state).pack(anchor=tk.W, pady=(5, 0))
+        ttk.Radiobutton(resize_frame, text="按宽度调整", variable=self.resize_method, value="width",
+                        command=self.update_resize_fields_state).pack(anchor=tk.W)
+        ttk.Radiobutton(resize_frame, text="按高度调整", variable=self.resize_method, value="height",
+                        command=self.update_resize_fields_state).pack(anchor=tk.W)
+        ttk.Radiobutton(resize_frame, text="按百分比调整", variable=self.resize_method, value="percentage",
+                        command=self.update_resize_fields_state).pack(anchor=tk.W, pady=(0, 5))
+
+        # 宽度调整输入
+        width_frame = ttk.Frame(resize_frame)
+        ttk.Label(width_frame, text="目标宽度:").pack(side=tk.LEFT)
+        self.width_entry = ttk.Entry(width_frame, textvariable=self.target_width, width=10)
+        self.width_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(width_frame, text="像素").pack(side=tk.LEFT)
+        width_frame.pack(fill=tk.X, pady=(0, 5), padx=20)
+
+        # 高度调整输入
+        height_frame = ttk.Frame(resize_frame)
+        ttk.Label(height_frame, text="目标高度:").pack(side=tk.LEFT)
+        self.height_entry = ttk.Entry(height_frame, textvariable=self.target_height, width=10)
+        self.height_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(height_frame, text="像素").pack(side=tk.LEFT)
+        height_frame.pack(fill=tk.X, pady=(0, 5), padx=20)
+
+        # 百分比调整输入
+        percentage_frame = ttk.Frame(resize_frame)
+        ttk.Label(percentage_frame, text="缩放比例:").pack(side=tk.LEFT)
+        self.percentage_entry = ttk.Entry(percentage_frame, textvariable=self.resize_percentage, width=10)
+        self.percentage_entry.pack(side=tk.LEFT, padx=5)
+        ttk.Label(percentage_frame, text="%").pack(side=tk.LEFT)
+        percentage_frame.pack(fill=tk.X, pady=(0, 5), padx=20)
+
+        self.update_resize_fields_state()  # 初始状态设置
+
+        ttk.Button(control_frame, text="导出选中图片", command=self.export_selected).pack(fill=tk.X, pady=(15, 5))
         ttk.Button(control_frame, text="导出所有图片", command=self.export_all).pack(fill=tk.X, pady=(0, 5))
 
         # 右侧图片列表区
@@ -106,6 +169,30 @@ class ImageProcessorApp:
         # 绑定事件以调整滚动区域
         self.images_container.bind("<Configure>", self.on_container_configure)
         self.image_listbox.bind("<Configure>", self.on_canvas_configure)
+
+    def update_quality_label(self, value):
+        """更新JPEG质量标签显示"""
+        self.quality_value_label.config(text=f"{int(float(value))}%")
+
+    def update_jpeg_quality_state(self):
+        """根据输出格式更新JPEG质量控件状态"""
+        state = tk.NORMAL if self.output_format.get().lower() == "jpeg" else tk.DISABLED
+        # 只对支持state属性的控件设置状态
+        self.quality_slider.configure(state=state)
+        # 标签不需要设置state，通过颜色区分是否可用
+        if state == tk.DISABLED:
+            self.quality_label_title.configure(foreground="#999999")
+            self.quality_value_label.configure(foreground="#999999")
+        else:
+            self.quality_label_title.configure(foreground="#000000")
+            self.quality_value_label.configure(foreground="#000000")
+
+    def update_resize_fields_state(self):
+        """根据尺寸调整方式更新输入框状态"""
+        method = self.resize_method.get()
+        self.width_entry.config(state=tk.NORMAL if method == "width" else tk.DISABLED)
+        self.height_entry.config(state=tk.NORMAL if method == "height" else tk.DISABLED)
+        self.percentage_entry.config(state=tk.NORMAL if method == "percentage" else tk.DISABLED)
 
     def enable_drag_and_drop(self):
         """使用更兼容的方式实现拖放功能"""
@@ -368,6 +455,43 @@ class ImageProcessorApp:
             self.output_dir = dir_path
             self.output_dir_label.config(text=os.path.basename(dir_path))
 
+    def resize_image(self, img):
+        """根据设置调整图片尺寸"""
+        method = self.resize_method.get()
+        if method == "none":
+            return img.copy()
+
+        original_width, original_height = img.size
+        new_width, new_height = original_width, original_height
+
+        try:
+            if method == "width":
+                # 按宽度调整，保持比例
+                target_width = max(1, self.target_width.get())  # 确保至少1像素
+                ratio = target_width / original_width
+                new_width = target_width
+                new_height = int(original_height * ratio)
+
+            elif method == "height":
+                # 按高度调整，保持比例
+                target_height = max(1, self.target_height.get())  # 确保至少1像素
+                ratio = target_height / original_height
+                new_height = target_height
+                new_width = int(original_width * ratio)
+
+            elif method == "percentage":
+                # 按百分比调整
+                percentage = max(1, min(1000, self.resize_percentage.get()))  # 限制在1-1000%
+                ratio = percentage / 100
+                new_width = int(original_width * ratio)
+                new_height = int(original_height * ratio)
+
+            # 调整图片尺寸
+            return img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        except Exception as e:
+            messagebox.showerror("错误", f"调整图片尺寸失败: {str(e)}")
+            return img.copy()
+
     def get_output_path(self, original_path):
         # 根据设置生成输出路径
         if not self.output_dir:
@@ -411,6 +535,20 @@ class ImageProcessorApp:
             messagebox.showinfo("提示", "请输入前缀或后缀文本")
             return
 
+        # 检查尺寸调整参数
+        if self.resize_method.get() == "width" and (self.target_width.get() <= 0):
+            messagebox.showinfo("提示", "请输入有效的目标宽度")
+            return
+
+        if self.resize_method.get() == "height" and (self.target_height.get() <= 0):
+            messagebox.showinfo("提示", "请输入有效的目标高度")
+            return
+
+        if self.resize_method.get() == "percentage" and (
+                self.resize_percentage.get() <= 0 or self.resize_percentage.get() > 1000):
+            messagebox.showinfo("提示", "请输入有效的缩放比例（1-1000%）")
+            return
+
         # 获取选中的图片
         selected_frames = [frame for frame in self.images_container.winfo_children()
                            if hasattr(frame, 'checkbox_var') and frame.checkbox_var.get()]
@@ -428,16 +566,20 @@ class ImageProcessorApp:
                     output_path = self.get_output_path(path)
                     if output_path:
                         try:
+                            # 调整图片尺寸
+                            resized_img = self.resize_image(img)
+
                             # 保存图片（处理格式差异）
                             if self.output_format.get().lower() == "jpeg":
                                 # JPEG不支持透明通道，转换为RGB（背景白色）
-                                if img.mode in ('RGBA', 'LA'):
-                                    background = Image.new(img.mode[:-1], img.size, (255, 255, 255))
-                                    background.paste(img, img.split()[-1])  # 用透明通道作为蒙版
-                                    img = background
-                                img.save(output_path, "JPEG", quality=95)
+                                if resized_img.mode in ('RGBA', 'LA'):
+                                    background = Image.new(resized_img.mode[:-1], resized_img.size, (255, 255, 255))
+                                    background.paste(resized_img, resized_img.split()[-1])  # 用透明通道作为蒙版
+                                    resized_img = background
+                                # 使用用户设置的质量值保存
+                                resized_img.save(output_path, "JPEG", quality=self.jpeg_quality.get())
                             else:  # PNG（保留透明通道）
-                                img.save(output_path, "PNG")
+                                resized_img.save(output_path, "PNG")
                             success_count += 1
                         except Exception as e:
                             messagebox.showerror("错误", f"导出 {file_name} 失败: {str(e)}")
@@ -455,8 +597,6 @@ class ImageProcessorApp:
         for frame in self.images_container.winfo_children():
             if hasattr(frame, 'checkbox_var'):
                 frame.checkbox_var.set(True)
-
-        # 调用导出选中图片的函数
         self.export_selected()
 
 
