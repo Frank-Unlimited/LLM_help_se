@@ -110,10 +110,17 @@ class ImageProcessorApp:
     def enable_drag_and_drop(self):
         """使用更兼容的方式实现拖放功能"""
         try:
-            # 尝试使用tkinterdnd2库（更可靠的拖放实现）
-            from tkinterdnd2 import DND_FILES, TkinterDnD
-            # 将根窗口转换为支持拖放的窗口
-            self.root = TkinterDnD(self.root)
+            # 修复tkinterdnd2的导入方式
+            from tkinterdnd2 import DND_FILES, Tk
+            # 检查是否已经是TkinterDnD的Tk对象
+            if not isinstance(self.root, Tk):
+                # 创建一个新的TkinterDnD窗口并转移配置
+                new_root = Tk()
+                new_root.title(self.root.title())
+                new_root.geometry(self.root.geometry())
+                self.root.destroy()
+                self.root = new_root
+
             # 绑定拖放事件
             self.images_container.drop_target_register(DND_FILES)
             self.images_container.dnd_bind('<<Drop>>', self.on_drop)
@@ -140,13 +147,6 @@ class ImageProcessorApp:
                 self.images_container.bind("<DragEnter>", self.on_drag_enter)
                 self.images_container.bind("<DragLeave>", self.on_drag_leave)
                 self.images_container.bind("<Drop>", self.on_drop)
-
-            # 提示用户可能需要安装tkinterdnd2以获得更好的拖放体验
-            messagebox.showinfo(
-                "提示",
-                "检测到系统拖放支持有限，拖放功能可能不稳定。\n"
-                "建议安装tkinterdnd2以获得更好体验：pip install tkinterdnd2"
-            )
         except Exception as e:
             messagebox.showinfo(
                 "提示",
@@ -169,8 +169,6 @@ class ImageProcessorApp:
 
     def on_drag_release(self, event):
         """处理拖放释放事件（Windows）"""
-        # 这种方式在某些环境下可能无法获取文件路径
-        # 作为最后的备选方案
         try:
             # 尝试从剪贴板获取文件路径
             files = self.root.clipboard_get().split()
@@ -463,6 +461,12 @@ class ImageProcessorApp:
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    # 检查是否已安装tkinterdnd2，如果已安装则使用其Tk类
+    try:
+        from tkinterdnd2 import Tk
+
+        root = Tk()
+    except ImportError:
+        root = tk.Tk()
     app = ImageProcessorApp(root)
     root.mainloop()
