@@ -1,17 +1,20 @@
 import os
+import json
 import tkinter as tk
-from tkinter import filedialog, ttk, messagebox, colorchooser
-from PIL import Image, ImageTk, ImageDraw, ImageFont
+from tkinter import filedialog, ttk, messagebox, colorchooser, simpledialog
+from PIL import Image, ImageTk, ImageDraw, ImageFont, ImageOps
 import glob
 import sys
+import math
+from datetime import datetime
 
 
 class ImageProcessorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("图片处理器")
-        self.root.geometry("1000x750")
-        self.root.minsize(900, 700)
+        self.root.geometry("1200x800")
+        self.root.minsize(1100, 700)
 
         # 确保中文显示正常
         self.style = ttk.Style()
@@ -22,6 +25,9 @@ class ImageProcessorApp:
 
         # 存储导入的图片信息
         self.images = []  # 格式: [(原图路径, 缩略图对象, 文件名, 图片副本), ...]
+        self.current_preview_index = -1  # 当前预览图片索引
+        self.preview_image = None  # 当前预览图片对象
+        self.preview_photo = None  # 当前预览图片的PhotoImage对象
 
         # 导出设置
         self.output_dir = ""
@@ -52,12 +58,29 @@ class ImageProcessorApp:
         self.watermark_image_obj = None  # 加载的水印图片对象
         self.watermark_image_scale = tk.IntVar(value=50)  # 图片缩放比例(0-200)
         self.watermark_image_opacity = tk.IntVar(value=50)  # 图片透明度(0-100)
+        # 3. 水印位置和旋转参数
+        self.watermark_position = tk.StringVar(value="bottom_right")  # 九宫格位置
+        self.watermark_x = tk.IntVar(value=0)  # 水印X坐标
+        self.watermark_y = tk.IntVar(value=0)  # 水印Y坐标
+        self.watermark_rotation = tk.IntVar(value=0)  # 水印旋转角度(0-360)
+        self.is_dragging = False  # 是否正在拖拽水印
+        self.drag_offset_x = 0  # 拖拽偏移X
+        self.drag_offset_y = 0  # 拖拽偏移Y
+
+        # 4. 水印模板管理
+        self.watermark_templates = {}  # 存储水印模板
+        self.template_dir = os.path.join(os.path.expanduser("~"), ".image_processor_templates")
+        self.current_template = tk.StringVar(value="")  # 当前选中的模板
+        self.load_templates()  # 加载保存的模板
 
         # 创建界面
         self.create_widgets()
 
         # 尝试启用拖放功能
         self.enable_drag_and_drop()
+
+        # 绑定水印设置变更事件，实现实时预览
+        self.bind_watermark_events()
 
     def create_widgets(self):
         # 创建主框架
@@ -255,8 +278,62 @@ class ImageProcessorApp:
         ttk.Label(img_opacity_frame, text="%").pack(side=tk.LEFT)
         img_opacity_frame.pack(fill=tk.X, pady=(0, 5))
 
+        # 4. 水印布局设置
+        layout_frame = ttk.LabelFrame(watermark_frame, text="水印布局")
+        layout_frame.pack(fill=tk.X, pady=(10, 0))
+
+        # 九宫格位置选择
+        ttk.Label(layout_frame, text="预设位置:").pack(anchor=tk.W, pady=(5, 0))
+        position_frame = ttk.Frame(layout_frame)
+
+        positions = [
+            ("左上", "top_left"), ("中上", "top_center"), ("右上", "top_right"),
+            ("左中", "middle_left"), ("中心", "center"), ("右中", "middle_right"),
+            ("左下", "bottom_left"), ("中下", "bottom_center"), ("右下", "bottom_right")
+        ]
+
+        for i, (text, value) in enumerate(positions):
+            row, col = divmod(i, 3)
+            ttk.Radiobutton(
+                position_frame, text=text, variable=self.watermark_position,
+                value=value, command=self.set_watermark_position
+            ).grid(row=row, column=col, padx=5, pady=2, sticky="w")
+
+        position_frame.pack(fill=tk.X, pady=(0, 5))
+
+        # 旋转设置
+        rotation_frame = ttk.Frame(layout_frame)
+        ttk.Label(rotation_frame, text="旋转角度:").pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Scale(rotation_frame, from_=0, to=359, variable=self.watermark_rotation,
+                  orient=tk.HORIZONTAL, length=150).pack(side=tk.LEFT, padx=5)
+        ttk.Label(rotation_frame, textvariable=self.watermark_rotation).pack(side=tk.LEFT, padx=5)
+        ttk.Label(rotation_frame, text="°").pack(side=tk.LEFT)
+        rotation_frame.pack(fill=tk.X, pady=(0, 5))
+
         # 初始化水印字段状态
         self.update_watermark_fields()
+
+        # 5. 水印模板管理
+        template_frame = ttk.LabelFrame(control_frame, text="水印模板", padding="10")
+        template_frame.pack(fill=tk.X, pady=(0, 15))
+
+        ttk.Label(template_frame, text="保存的模板:").pack(anchor=tk.W, pady=(0, 5))
+        template_select_frame = ttk.Frame(template_frame)
+        self.template_combobox = ttk.Combobox(
+            template_select_frame, textvariable=self.current_template,
+            state="readonly", width=25
+        )
+        self.template_combobox.pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(template_select_frame, text="加载", command=self.load_selected_template).pack(side=tk.LEFT, padx=2)
+        ttk.Button(template_select_frame, text="删除", command=self.delete_selected_template).pack(side=tk.LEFT, padx=2)
+        template_select_frame.pack(fill=tk.X, pady=(0, 5))
+
+        save_template_frame = ttk.Frame(template_frame)
+        self.new_template_name = ttk.Entry(save_template_frame, width=20)
+        self.new_template_name.pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(save_template_frame, text="保存当前设置为模板", command=self.save_current_as_template).pack(
+            side=tk.LEFT)
+        save_template_frame.pack(fill=tk.X, pady=(0, 5))
 
         ttk.Button(control_frame, text="导出选中图片", command=self.export_selected).pack(fill=tk.X, pady=(15, 5))
         ttk.Button(control_frame, text="导出所有图片", command=self.export_all).pack(fill=tk.X, pady=(0, 5))
@@ -264,9 +341,26 @@ class ImageProcessorApp:
         # 添加一个占位元素，确保最后有足够空间
         ttk.Label(control_frame, text="").pack(pady=10)
 
-        # 右侧图片列表区
-        image_frame = ttk.LabelFrame(main_frame, text="已导入图片", padding="10")
-        image_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        # 右侧区域 - 分为预览区和图片列表区
+        right_frame = ttk.Frame(main_frame)
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # 预览区
+        preview_frame = ttk.LabelFrame(right_frame, text="预览", padding="10")
+        preview_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # 预览画布
+        self.preview_canvas = tk.Canvas(preview_frame, bg="#f0f0f0", highlightthickness=1, highlightbackground="#ccc")
+        self.preview_canvas.pack(fill=tk.BOTH, expand=True)
+
+        # 绑定预览画布事件用于拖拽水印
+        self.preview_canvas.bind("<Button-1>", self.start_drag_watermark)
+        self.preview_canvas.bind("<B1-Motion>", self.drag_watermark)
+        self.preview_canvas.bind("<ButtonRelease-1>", self.stop_drag_watermark)
+
+        # 图片列表区
+        image_frame = ttk.LabelFrame(right_frame, text="已导入图片", padding="10")
+        image_frame.pack(fill=tk.BOTH, expand=True)
 
         # 滚动条
         scrollbar = ttk.Scrollbar(image_frame)
@@ -293,6 +387,9 @@ class ImageProcessorApp:
         # 绑定事件以调整滚动区域
         self.images_container.bind("<Configure>", self.on_container_configure)
         self.image_listbox.bind("<Configure>", self.on_canvas_configure)
+
+        # 更新模板列表
+        self.update_template_list()
 
     def update_quality_label(self, value):
         """更新JPEG质量标签显示"""
@@ -532,6 +629,10 @@ class ImageProcessorApp:
         if new_images:
             self.images.extend(new_images)
             self.update_image_list()
+            # 如果是第一次导入图片，自动预览第一张
+            if self.current_preview_index == -1 and self.images:
+                self.current_preview_index = 0
+                self.update_preview()
             messagebox.showinfo("成功", f"成功导入 {len(new_images)} 张图片")
 
     def update_image_list(self):
@@ -542,7 +643,11 @@ class ImageProcessorApp:
         # 显示所有图片
         cols = 4  # 每行显示4张图片
         for i, (path, photo, file_name, img) in enumerate(self.images):
-            frame = ttk.Frame(self.images_container, padding="5")
+            frame = ttk.Frame(self.images_container, padding="5",
+                              relief=tk.RAISED if i == self.current_preview_index else tk.FLAT, borderwidth=2)
+
+            # 点击图片切换预览
+            frame.bind("<Button-1>", lambda e, idx=i: self.set_preview_image(idx))
 
             # 复选框
             var = tk.BooleanVar(value=True)
@@ -554,11 +659,13 @@ class ImageProcessorApp:
             label_img = ttk.Label(frame, image=photo)
             label_img.image = photo  # 保持引用（避免被垃圾回收）
             label_img.pack(pady=(0, 5))
+            label_img.bind("<Button-1>", lambda e, idx=i: self.set_preview_image(idx))
 
             # 文件名（显示部分，过长截断）
             display_name = file_name if len(file_name) <= 15 else file_name[:12] + "..."
             label_name = ttk.Label(frame, text=display_name, wraplength=120)
             label_name.pack()
+            label_name.bind("<Button-1>", lambda e, idx=i: self.set_preview_image(idx))
 
             # 存储路径和变量引用
             frame.image_path = path
@@ -629,8 +736,8 @@ class ImageProcessorApp:
         slant = "italic" if self.watermark_font_italic.get() else "roman"
         return (self.watermark_font_family.get(), self.watermark_font_size.get(), weight, slant)
 
-    def add_text_watermark(self, img):
-        """给图片添加文本水印（支持透明度、阴影）"""
+    def add_text_watermark(self, img, is_preview=False):
+        """给图片添加文本水印（支持透明度、阴影、旋转）"""
         img_copy = img.copy()
         draw = ImageDraw.Draw(img_copy, mode="RGBA")
         text = self.watermark_text.get()
@@ -658,21 +765,48 @@ class ImageProcessorApp:
         opacity = int(self.watermark_text_opacity.get() * 2.55)  # 转0-255
         text_color = (r, g, b, opacity)
 
-        # 2. 计算水印位置（右下角，距边缘20px）
+        # 2. 获取文本尺寸和位置
         img_width, img_height = img_copy.size
         text_bbox = draw.textbbox((0, 0), text, font=font)
         text_width = text_bbox[2] - text_bbox[0]
         text_height = text_bbox[3] - text_bbox[1]
-        x = img_width - text_width - 20
-        y = img_height - text_height - 20
 
-        # 3. 添加阴影（可选）
-        if self.watermark_text_shadow.get():
-            shadow_color = (0, 0, 0, int(opacity * 0.3))  # 半透明黑色阴影
-            draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+        # 如果是预览且没有设置过位置，使用预设位置
+        if is_preview and (self.watermark_x.get() == 0 and self.watermark_y.get() == 0):
+            self.set_watermark_position()
 
-        # 4. 添加文本水印
-        draw.text((x, y), text, font=font, fill=text_color)
+        x, y = self.watermark_x.get(), self.watermark_y.get()
+
+        # 3. 处理旋转
+        rotation = self.watermark_rotation.get()
+        if rotation != 0:
+            # 创建一个临时图像来绘制旋转后的文本
+            temp_img = Image.new('RGBA', (text_width + 20, text_height + 20), (0, 0, 0, 0))
+            temp_draw = ImageDraw.Draw(temp_img)
+
+            # 添加阴影到临时图像
+            if self.watermark_text_shadow.get():
+                shadow_color = (0, 0, 0, int(opacity * 0.3))  # 半透明黑色阴影
+                temp_draw.text((2, 2), text, font=font, fill=shadow_color)
+
+            # 添加文本到临时图像
+            temp_draw.text((0, 0), text, font=font, fill=text_color)
+
+            # 旋转临时图像
+            rotated_temp = temp_img.rotate(rotation, expand=True, resample=Image.Resampling.BILINEAR)
+
+            # 将旋转后的文本粘贴到原图
+            img_copy.paste(rotated_temp, (x, y), rotated_temp)
+        else:
+            # 不旋转的情况
+            # 添加阴影
+            if self.watermark_text_shadow.get():
+                shadow_color = (0, 0, 0, int(opacity * 0.3))  # 半透明黑色阴影
+                draw.text((x + 2, y + 2), text, font=font, fill=shadow_color)
+
+            # 添加文本水印
+            draw.text((x, y), text, font=font, fill=text_color)
+
         return img_copy
 
     # 图片水印相关方法
@@ -694,13 +828,18 @@ class ImageProcessorApp:
                     preview_photo = ImageTk.PhotoImage(preview)
                     self.watermark_preview_label.config(image=preview_photo, text="")
                     self.watermark_preview_label.image = preview_photo  # 防止GC回收
+
+                    # 重置水印位置
+                    self.watermark_x.set(0)
+                    self.watermark_y.set(0)
+                    self.update_preview()
             except Exception as e:
                 messagebox.showerror("错误", f"加载水印图片失败: {str(e)}")
                 self.watermark_image_path.set("")
                 self.watermark_image_obj = None
 
-    def add_image_watermark(self, img):
-        """给图片添加图片水印（支持缩放、透明度、透明通道）"""
+    def add_image_watermark(self, img, is_preview=False):
+        """给图片添加图片水印（支持缩放、透明度、透明通道、旋转）"""
         if not self.watermark_image_obj:
             return img.copy()  # 无水印图片时返回原图
 
@@ -722,12 +861,26 @@ class ImageProcessorApp:
         new_wm_data = [(r, g, b, int(a * opacity / 255)) for r, g, b, a in wm_data]
         watermark.putdata(new_wm_data)
 
-        # 3. 计算水印位置（右下角，距边缘20px）
-        img_width, img_height = img_copy.size
-        x = max(0, img_width - wm_width - 20)
-        y = max(0, img_height - wm_height - 20)
+        # 3. 处理旋转
+        rotation = self.watermark_rotation.get()
+        if rotation != 0:
+            watermark = watermark.rotate(rotation, expand=True, resample=Image.Resampling.BILINEAR)
 
-        # 4. 叠加水印（保留PNG透明通道）
+        # 4. 获取水印尺寸和位置
+        wm_width, wm_height = watermark.size
+        img_width, img_height = img_copy.size
+
+        # 如果是预览且没有设置过位置，使用预设位置
+        if is_preview and (self.watermark_x.get() == 0 and self.watermark_y.get() == 0):
+            self.set_watermark_position()
+
+        x, y = self.watermark_x.get(), self.watermark_y.get()
+
+        # 确保水印不会超出图片范围太多
+        x = max(0, min(x, img_width - 10))
+        y = max(0, min(y, img_height - 10))
+
+        # 5. 叠加水印（保留PNG透明通道）
         img_copy.paste(watermark, (x, y), watermark)  # 第三个参数是蒙版，保留透明
         return img_copy
 
@@ -746,6 +899,9 @@ class ImageProcessorApp:
         else:
             self.text_watermark_subframe.pack_forget()
             self.image_watermark_subframe.pack_forget()
+
+        # 更新预览
+        self.update_preview()
 
     def get_output_path(self, original_path):
         # 根据设置生成输出路径
@@ -866,6 +1022,464 @@ class ImageProcessorApp:
 
         # 调用导出选中图片的函数
         self.export_selected()
+
+    # 水印布局与实时预览相关方法
+    def bind_watermark_events(self):
+        """绑定水印设置变更事件，实现实时预览"""
+        # 水印类型变更
+        self.watermark_type.trace_add("write", lambda *args: self.update_preview())
+
+        # 文本水印变更
+        self.watermark_text.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_font_family.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_font_size.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_font_bold.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_font_italic.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_text_color.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_text_opacity.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_text_shadow.trace_add("write", lambda *args: self.update_preview())
+
+        # 图片水印变更
+        self.watermark_image_scale.trace_add("write", lambda *args: self.update_preview())
+        self.watermark_image_opacity.trace_add("write", lambda *args: self.update_preview())
+
+        # 水印位置和旋转变更
+        self.watermark_position.trace_add("write", lambda *args: self.set_watermark_position())
+        self.watermark_rotation.trace_add("write", lambda *args: self.update_preview())
+
+        # 尺寸调整变更
+        self.resize_method.trace_add("write", lambda *args: self.update_preview())
+        self.target_width.trace_add("write", lambda *args: self.update_preview())
+        self.target_height.trace_add("write", lambda *args: self.update_preview())
+        self.resize_percentage.trace_add("write", lambda *args: self.update_preview())
+
+    def set_preview_image(self, index):
+        """设置当前预览图片"""
+        if 0 <= index < len(self.images):
+            self.current_preview_index = index
+            self.update_image_list()  # 更新列表高亮显示
+            self.update_preview()  # 更新预览
+
+    def update_preview(self):
+        """更新预览窗口显示"""
+        if self.current_preview_index < 0 or self.current_preview_index >= len(self.images):
+            return
+
+        # 获取当前图片
+        path, photo, file_name, img = self.images[self.current_preview_index]
+
+        # 调整尺寸
+        resized_img = self.resize_image(img)
+
+        # 添加水印
+        watermark_type = self.watermark_type.get()
+        if watermark_type == "text":
+            self.preview_image = self.add_text_watermark(resized_img, is_preview=True)
+        elif watermark_type == "image":
+            self.preview_image = self.add_image_watermark(resized_img, is_preview=True)
+        else:
+            self.preview_image = resized_img
+
+        # 调整预览大小以适应窗口
+        self.display_preview_image()
+
+    def display_preview_image(self):
+        """在画布上显示预览图片"""
+        if not self.preview_image:
+            return
+
+        # 清除画布
+        self.preview_canvas.delete("all")
+
+        # 获取画布尺寸
+        canvas_width = self.preview_canvas.winfo_width()
+        canvas_height = self.preview_canvas.winfo_height()
+
+        # 如果画布还没渲染，使用默认尺寸
+        if canvas_width <= 1 or canvas_height <= 1:
+            canvas_width = 800
+            canvas_height = 600
+
+        # 计算缩放比例以适应画布
+        img_width, img_height = self.preview_image.size
+        scale = min(canvas_width / img_width, canvas_height / img_height, 1.0)
+
+        # 计算缩放后的尺寸
+        new_width = int(img_width * scale)
+        new_height = int(img_height * scale)
+
+        # 缩放图片
+        scaled_img = self.preview_image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        self.preview_photo = ImageTk.PhotoImage(scaled_img)
+
+        # 计算居中位置
+        x = (canvas_width - new_width) // 2
+        y = (canvas_height - new_height) // 2
+
+        # 在画布上显示图片
+        self.preview_canvas.create_image(x, y, anchor=tk.NW, image=self.preview_photo)
+
+        # 存储预览信息
+        self.preview_info = {
+            "original_size": (img_width, img_height),
+            "scaled_size": (new_width, new_height),
+            "scale": scale,
+            "position": (x, y)
+        }
+
+        # 绑定画布大小变化事件
+        self.preview_canvas.bind("<Configure>", lambda e: self.display_preview_image())
+
+    def set_watermark_position(self):
+        """根据九宫格位置设置水印位置"""
+        if self.current_preview_index < 0 or self.current_preview_index >= len(self.images):
+            return
+
+        # 获取当前图片
+        path, photo, file_name, img = self.images[self.current_preview_index]
+        resized_img = self.resize_image(img)
+        img_width, img_height = resized_img.size
+
+        # 获取水印尺寸
+        if self.watermark_type.get() == "text":
+            # 计算文本水印尺寸
+            try:
+                font = ImageFont.truetype(
+                    font=self.watermark_font_family.get(),
+                    size=self.watermark_font_size.get(),
+                    weight="bold" if self.watermark_font_bold.get() else "normal"
+                )
+            except:
+                font = ImageFont.load_default()
+
+            draw = ImageDraw.Draw(resized_img)
+            text = self.watermark_text.get() or " "  # 防止空文本
+            text_bbox = draw.textbbox((0, 0), text, font=font)
+            wm_width = text_bbox[2] - text_bbox[0]
+            wm_height = text_bbox[3] - text_bbox[1]
+        elif self.watermark_type.get() == "image" and self.watermark_image_obj:
+            # 计算图片水印尺寸
+            scale = self.watermark_image_scale.get() / 100
+            wm_width = int(self.watermark_image_obj.width * scale)
+            wm_height = int(self.watermark_image_obj.height * scale)
+        else:
+            return
+
+        # 根据选择的位置计算坐标
+        position = self.watermark_position.get()
+        margin = 20  # 边距
+
+        if position == "top_left":
+            x, y = margin, margin
+        elif position == "top_center":
+            x, y = (img_width - wm_width) // 2, margin
+        elif position == "top_right":
+            x, y = img_width - wm_width - margin, margin
+        elif position == "middle_left":
+            x, y = margin, (img_height - wm_height) // 2
+        elif position == "center":
+            x, y = (img_width - wm_width) // 2, (img_height - wm_height) // 2
+        elif position == "middle_right":
+            x, y = img_width - wm_width - margin, (img_height - wm_height) // 2
+        elif position == "bottom_left":
+            x, y = margin, img_height - wm_height - margin
+        elif position == "bottom_center":
+            x, y = (img_width - wm_width) // 2, img_height - wm_height - margin
+        else:  # bottom_right
+            x, y = img_width - wm_width - margin, img_height - wm_height - margin
+
+        # 更新水印位置
+        self.watermark_x.set(x)
+        self.watermark_y.set(y)
+
+        # 更新预览
+        self.update_preview()
+
+    def start_drag_watermark(self, event):
+        """开始拖拽水印"""
+        if self.watermark_type.get() == "none":
+            return
+
+        if not hasattr(self, 'preview_info'):
+            return
+
+        # 获取预览信息
+        scale = self.preview_info["scale"]
+        img_x, img_y = self.preview_info["position"]
+        img_width, img_height = self.preview_info["original_size"]
+
+        # 计算点击位置在原图上的坐标
+        click_x = (event.x - img_x) / scale
+        click_y = (event.y - img_y) / scale
+
+        # 判断是否点击在水印上
+        if self.is_point_on_watermark(click_x, click_y, img_width, img_height):
+            self.is_dragging = True
+            # 计算偏移量
+            self.drag_offset_x = click_x - self.watermark_x.get()
+            self.drag_offset_y = click_y - self.watermark_y.get()
+
+    def drag_watermark(self, event):
+        """拖拽水印过程"""
+        if not self.is_dragging or self.watermark_type.get() == "none":
+            return
+
+        if not hasattr(self, 'preview_info'):
+            return
+
+        # 获取预览信息
+        scale = self.preview_info["scale"]
+        img_x, img_y = self.preview_info["position"]
+        img_width, img_height = self.preview_info["original_size"]
+
+        # 计算拖拽位置在原图上的坐标
+        new_x = (event.x - img_x) / scale - self.drag_offset_x
+        new_y = (event.y - img_y) / scale - self.drag_offset_y
+
+        # 更新水印位置
+        self.watermark_x.set(int(new_x))
+        self.watermark_y.set(int(new_y))
+
+        # 更新预览
+        self.update_preview()
+
+    def stop_drag_watermark(self, event):
+        """停止拖拽水印"""
+        self.is_dragging = False
+
+    def is_point_on_watermark(self, x, y, img_width, img_height):
+        """判断点是否在水印上"""
+        wm_x, wm_y = self.watermark_x.get(), self.watermark_y.get()
+
+        # 获取水印尺寸
+        if self.watermark_type.get() == "text":
+            try:
+                font = ImageFont.truetype(
+                    font=self.watermark_font_family.get(),
+                    size=self.watermark_font_size.get(),
+                    weight="bold" if self.watermark_font_bold.get() else "normal"
+                )
+            except:
+                font = ImageFont.load_default()
+
+            text = self.watermark_text.get() or " "  # 防止空文本
+            temp_img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(temp_img)
+            text_bbox = draw.textbbox((wm_x, wm_y), text, font=font)
+            return (text_bbox[0] <= x <= text_bbox[2] and
+                    text_bbox[1] <= y <= text_bbox[3])
+
+        elif self.watermark_type.get() == "image" and self.watermark_image_obj:
+            scale = self.watermark_image_scale.get() / 100
+            wm_width = int(self.watermark_image_obj.width * scale)
+            wm_height = int(self.watermark_image_obj.height * scale)
+
+            # 考虑旋转的情况
+            rotation = self.watermark_rotation.get()
+            if rotation != 0:
+                # 简化处理，使用旋转后的外接矩形判断
+                angle_rad = math.radians(rotation)
+                cos_theta = abs(math.cos(angle_rad))
+                sin_theta = abs(math.sin(angle_rad))
+                rotated_width = int(wm_width * cos_theta + wm_height * sin_theta)
+                rotated_height = int(wm_width * sin_theta + wm_height * cos_theta)
+
+                # 计算旋转后水印的中心位置
+                center_x = wm_x + wm_width / 2
+                center_y = wm_y + wm_height / 2
+
+                # 判断点是否在旋转后的外接矩形内
+                return (center_x - rotated_width / 2 <= x <= center_x + rotated_width / 2 and
+                        center_y - rotated_height / 2 <= y <= center_y + rotated_height / 2)
+            else:
+                # 不旋转的情况
+                return (wm_x <= x <= wm_x + wm_width and
+                        wm_y <= y <= wm_y + wm_height)
+
+        return False
+
+    # 水印模板管理相关方法
+    def load_templates(self):
+        """加载保存的水印模板"""
+        try:
+            # 确保模板目录存在
+            if not os.path.exists(self.template_dir):
+                os.makedirs(self.template_dir)
+
+            # 加载目录中的所有模板文件
+            for filename in os.listdir(self.template_dir):
+                if filename.endswith(".json"):
+                    template_name = os.path.splitext(filename)[0]
+                    with open(os.path.join(self.template_dir, filename), 'r', encoding='utf-8') as f:
+                        self.watermark_templates[template_name] = json.load(f)
+
+            # 尝试加载上次使用的模板
+            last_used_path = os.path.join(self.template_dir, "__last_used__.json")
+            if os.path.exists(last_used_path):
+                with open(last_used_path, 'r', encoding='utf-8') as f:
+                    last_settings = json.load(f)
+                    self.apply_watermark_settings(last_settings)
+
+        except Exception as e:
+            print(f"加载模板失败: {e}")
+
+    def update_template_list(self):
+        """更新模板下拉列表"""
+        self.template_combobox['values'] = list(self.watermark_templates.keys())
+        if self.watermark_templates and not self.current_template.get():
+            self.current_template.set(next(iter(self.watermark_templates.keys())))
+
+    def save_current_as_template(self):
+        """将当前水印设置保存为模板"""
+        template_name = self.new_template_name.get().strip()
+        if not template_name:
+            template_name = f"模板_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+        # 收集当前水印设置
+        settings = {
+            "watermark_type": self.watermark_type.get(),
+
+            # 文本水印设置
+            "watermark_text": self.watermark_text.get(),
+            "watermark_font_family": self.watermark_font_family.get(),
+            "watermark_font_size": self.watermark_font_size.get(),
+            "watermark_font_bold": self.watermark_font_bold.get(),
+            "watermark_font_italic": self.watermark_font_italic.get(),
+            "watermark_text_color": self.watermark_text_color.get(),
+            "watermark_text_opacity": self.watermark_text_opacity.get(),
+            "watermark_text_shadow": self.watermark_text_shadow.get(),
+
+            # 图片水印设置
+            "watermark_image_path": self.watermark_image_path.get(),
+            "watermark_image_scale": self.watermark_image_scale.get(),
+            "watermark_image_opacity": self.watermark_image_opacity.get(),
+
+            # 布局设置
+            "watermark_position": self.watermark_position.get(),
+            "watermark_rotation": self.watermark_rotation.get()
+        }
+
+        # 保存模板
+        try:
+            # 保存模板文件
+            template_path = os.path.join(self.template_dir, f"{template_name}.json")
+            with open(template_path, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+
+            # 添加到模板字典
+            self.watermark_templates[template_name] = settings
+
+            # 更新模板列表
+            self.update_template_list()
+
+            # 清空输入框
+            self.new_template_name.delete(0, tk.END)
+
+            messagebox.showinfo("成功", f"模板 '{template_name}' 已保存")
+
+            # 保存为上次使用的设置
+            self.save_last_used_settings(settings)
+
+        except Exception as e:
+            messagebox.showerror("错误", f"保存模板失败: {str(e)}")
+
+    def load_selected_template(self):
+        """加载选中的模板"""
+        template_name = self.current_template.get()
+        if not template_name or template_name not in self.watermark_templates:
+            messagebox.showinfo("提示", "请选择有效的模板")
+            return
+
+        # 应用模板设置
+        settings = self.watermark_templates[template_name]
+        self.apply_watermark_settings(settings)
+
+        # 保存为上次使用的设置
+        self.save_last_used_settings(settings)
+
+        messagebox.showinfo("成功", f"已加载模板 '{template_name}'")
+
+    def delete_selected_template(self):
+        """删除选中的模板"""
+        template_name = self.current_template.get()
+        if not template_name or template_name not in self.watermark_templates:
+            messagebox.showinfo("提示", "请选择有效的模板")
+            return
+
+        if messagebox.askyesno("确认", f"确定要删除模板 '{template_name}' 吗？"):
+            try:
+                # 删除模板文件
+                template_path = os.path.join(self.template_dir, f"{template_name}.json")
+                if os.path.exists(template_path):
+                    os.remove(template_path)
+
+                # 从模板字典中移除
+                del self.watermark_templates[template_name]
+
+                # 更新模板列表
+                self.update_template_list()
+
+                messagebox.showinfo("成功", f"模板 '{template_name}' 已删除")
+            except Exception as e:
+                messagebox.showerror("错误", f"删除模板失败: {str(e)}")
+
+    def apply_watermark_settings(self, settings):
+        """应用水印设置"""
+        # 应用水印类型
+        self.watermark_type.set(settings.get("watermark_type", "none"))
+
+        # 应用文本水印设置
+        self.watermark_text.set(settings.get("watermark_text", ""))
+        self.watermark_font_family.set(settings.get("watermark_font_family", "SimHei"))
+        self.watermark_font_size.set(settings.get("watermark_font_size", 24))
+        self.watermark_font_bold.set(settings.get("watermark_font_bold", False))
+        self.watermark_font_italic.set(settings.get("watermark_font_italic", False))
+        self.watermark_text_color.set(settings.get("watermark_text_color", "#000000"))
+        self.watermark_text_opacity.set(settings.get("watermark_text_opacity", 50))
+        self.watermark_text_shadow.set(settings.get("watermark_text_shadow", True))
+
+        # 应用图片水印设置
+        img_path = settings.get("watermark_image_path", "")
+        self.watermark_image_path.set(img_path)
+        # 尝试加载图片
+        if img_path and os.path.exists(img_path):
+            try:
+                with Image.open(img_path) as img:
+                    self.watermark_image_obj = img.copy()
+                    # 更新预览
+                    preview = img.copy()
+                    preview.thumbnail((100, 100))
+                    preview_photo = ImageTk.PhotoImage(preview)
+                    self.watermark_preview_label.config(image=preview_photo, text="")
+                    self.watermark_preview_label.image = preview_photo
+            except:
+                pass
+
+        self.watermark_image_scale.set(settings.get("watermark_image_scale", 50))
+        self.watermark_image_opacity.set(settings.get("watermark_image_opacity", 50))
+
+        # 应用布局设置
+        self.watermark_position.set(settings.get("watermark_position", "bottom_right"))
+        self.watermark_rotation.set(settings.get("watermark_rotation", 0))
+
+        # 更新水印字段显示状态
+        self.update_watermark_fields()
+
+        # 重置水印位置（会根据预设位置重新计算）
+        self.watermark_x.set(0)
+        self.watermark_y.set(0)
+
+        # 更新预览
+        self.update_preview()
+
+    def save_last_used_settings(self, settings):
+        """保存上次使用的设置"""
+        try:
+            last_used_path = os.path.join(self.template_dir, "__last_used__.json")
+            with open(last_used_path, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"保存上次使用的设置失败: {e}")
 
 
 if __name__ == "__main__":
