@@ -6,8 +6,8 @@ on:
       - main
       - master
     paths:
-      - 'homework3/app_507029916162/**'  # 仅监听目标应用目录变更
-      - '.github/workflows/docker-build-push.yml'  # 监听 workflow 文件变更
+      - 'homework3/app_507029916162/**'
+      - '.github/workflows/docker-build-push.yml'
   pull_request:
     branches:
       - main
@@ -15,82 +15,73 @@ on:
     paths:
       - 'homework3/app_507029916162/**'
       - '.github/workflows/docker-build-push.yml'
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch: # 允许手动触发
 
 env:
-  # 阿里云ACR核心配置（完全匹配提供的公网地址）
   DOCKER_REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com
-  IMAGE_NAMESPACE: hhc510105200301150090  # ACR命名空间
-  IMAGE_NAME: travel_plan  # 阿里云ACR仓库名（关键修正）
-  DOCKERFILE_PATH: homework3/app_507029916162/Dockerfile  # Dockerfile路径
-  BUILD_CONTEXT: homework3/app_507029916162  # 构建上下文路径
+  IMAGE_NAME: hhc
+  IMAGE_NAMESPACE: hhc510105200301150090
+  DOCKERFILE_PATH: homework3/app_507029916162/Dockerfile
+  BUILD_CONTEXT: homework3/app_507029916162
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write  # 赋予镜像推送权限
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # 确保获取完整提交历史用于生成标签
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true  # 安装最新版Buildx，优化构建体验
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Aliyun Container Registry
-        if: github.event_name != 'pull_request'  # PR事件不登录、不推送
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ secrets.ALIYUN_ACR_USERNAME }}  # 对应阿里云登录用户：nick1329599640
-          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}  # 对应阿里云ACR访问凭证密码
-          logout: true  # 构建完成后自动登出，提升安全性
+    - name: Log in to Aliyun Container Registry
+      if: github.event_name != 'pull_request'
+      run: |
+        echo "Logging in to Aliyun Container Registry..."
+        echo "${{ secrets.ALIYUN_ACR_PASSWORD }}" | docker login ${{ env.DOCKER_REGISTRY }} \
+          --username "${{ secrets.ALIYUN_ACR_USERNAME }}" \
+          --password-stdin
+        echo "Login successful!"
 
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          # 镜像完整地址（匹配ACR公网地址格式）
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch  # 分支名作为标签（如main）
-            type=sha,prefix=${{ github.ref_name }}-  # 提交SHA作为标签（如main-84ff1ca）
-            type=raw,value=latest,enable={{is_default_branch}}  # 默认分支自动打latest标签
-          flavor: |
-            suffix=-pr{{number}},onpr=true  # PR事件添加pr编号后缀
-          labels: |
-            org.opencontainers.image.authors=Your Name  # 可自定义镜像作者标签
-            org.opencontainers.image.description=Travel Plan AI Application  # 镜像描述
+    - name: Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+        flavor: |
+          suffix=-pr{{number}},onpr=true
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ env.BUILD_CONTEXT }}
-          file: ${{ env.DOCKERFILE_PATH }}
-          push: ${{ github.event_name != 'pull_request' }}  # PR仅构建不推送
-          tags: ${{ steps.meta.outputs.tags }}  # 使用自动生成的标签
-          labels: ${{ steps.meta.outputs.labels }}  # 使用自动生成的标签
-          # 镜像缓存配置（提升后续构建速度）
-          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ env.BUILD_CONTEXT }}
+        file: ${{ env.DOCKERFILE_PATH }}
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
-      - name: Output image info
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "✅ Docker image built successfully (PR build, not pushed)"
-            echo "📦 Image tags (not pushed):"
-            echo "${{ steps.meta.outputs.tags }}"
-          else
-            echo "✅ Docker image built and pushed successfully!"
-            echo "📦 Image tags:"
-            echo "${{ steps.meta.outputs.tags }}"
-            echo ""
-            echo "🔗 ACR Public URL:"
-            echo "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}"
-          fi
+    - name: Output image info
+      run: |
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "? Docker image built successfully (PR build, not pushed)"
+          echo "? Image tags (not pushed):"
+          echo "${{ steps.meta.outputs.tags }}"
+        else
+          echo "? Docker image built and pushed successfully!"
+          echo "? Image tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo ""
+          echo "? Image URL:"
+          echo "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}"
+        fi
+
