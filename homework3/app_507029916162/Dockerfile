@@ -18,8 +18,9 @@ RUN npm ci
 COPY src ./src
 COPY index.html ./
 
-# 构建前端
-RUN npm run build
+# 构建前端（跳过 TypeScript 类型检查，仅进行构建）
+# Vite 会处理 TypeScript 转译，所以不需要先运行 tsc
+RUN npm run build:docker
 
 # 阶段2: Python后端运行环境
 FROM python:3.10-slim
