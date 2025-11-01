@@ -12,6 +12,22 @@ import re
 import random
 import string
 
+# Load environment variables from .env file if python-dotenv is available
+try:
+    from dotenv import load_dotenv
+    # Load .env file from the backend directory
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(backend_dir, '.env')
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
+        print(f"[Backend] Loaded environment variables from {env_path}")
+    else:
+        # Try loading from project root
+        load_dotenv()
+except ImportError:
+    # python-dotenv not installed, rely on system environment variables
+    pass
+
 from models import (
     TripGenerationRequest, TripGenerationResponse,
     TripDetail, TripSummary, TripsListResponse,

@@ -1,5 +1,8 @@
 // @ts-nocheck
 
+// 首先加载配置模块，确保 window.config 在使用前已初始化
+import './config';
+
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import '@fortawesome/fontawesome-free/css/all.min.css';

@@ -14,14 +14,31 @@ import random
 try:
     from cozepy import COZE_CN_BASE_URL, Coze, TokenAuth, Stream, WorkflowEvent, WorkflowEventType
     
-    # Get Coze API token from environment variable or use default
-    COZE_API_TOKEN = os.getenv("COZE_API_TOKEN", "pat_kHM3rm8CbTqUuDk5JoSGVErqFGkiP0Q5uq2qW0qpr4zVER79upO0lLgLNIdiTlGN")
+    # Get Coze API token from environment variable (required, no default)
+    COZE_API_TOKEN = os.getenv("COZE_API_TOKEN")
+    if not COZE_API_TOKEN:
+        raise ValueError(
+            "COZE_API_TOKEN environment variable is required but not set. "
+            "Please set it in your .env file or environment variables."
+        )
+    
     COZE_API_BASE = COZE_CN_BASE_URL
     
-    # Workflow ID from Coze platform
-    WORKFLOW_ID = os.getenv("COZE_WORKFLOW_ID", "7566908212949270528")
-    # Expense parsing workflow ID
-    EXPENSE_WORKFLOW_ID = os.getenv("COZE_EXPENSE_WORKFLOW_ID", "7567323652867375167")
+    # Workflow ID from Coze platform (required, no default)
+    WORKFLOW_ID = os.getenv("COZE_WORKFLOW_ID")
+    if not WORKFLOW_ID:
+        raise ValueError(
+            "COZE_WORKFLOW_ID environment variable is required but not set. "
+            "Please set it in your .env file or environment variables."
+        )
+    
+    # Expense parsing workflow ID (required, no default)
+    EXPENSE_WORKFLOW_ID = os.getenv("COZE_EXPENSE_WORKFLOW_ID")
+    if not EXPENSE_WORKFLOW_ID:
+        raise ValueError(
+            "COZE_EXPENSE_WORKFLOW_ID environment variable is required but not set. "
+            "Please set it in your .env file or environment variables."
+        )
     
     # Initialize Coze client
     coze = Coze(auth=TokenAuth(token=COZE_API_TOKEN), base_url=COZE_API_BASE)
@@ -31,7 +48,7 @@ except ImportError as e:
     COZE_AVAILABLE = False
     coze = None
     raise RuntimeError(f"cozepy package is required but not installed. Please install it with: pip install cozepy. Original error: {str(e)}")
-except Exception as e:
+except (ValueError, Exception) as e:
     COZE_AVAILABLE = False
     coze = None
     raise RuntimeError(f"Failed to initialize Coze workflow: {str(e)}")
