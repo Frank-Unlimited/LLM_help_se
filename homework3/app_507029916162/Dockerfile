@@ -115,27 +115,8 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/sites-available/default
 
-# 创建supervisor配置
-RUN echo '[supervisord] \
-nodaemon=true \
-logfile=/var/log/supervisor/supervisord.log \
-pidfile=/var/run/supervisord.pid \
-\
-[program:backend] \
-command=uvicorn app:app --host 0.0.0.0 --port 3000 --workers 2 \
-directory=/app/backend \
-autostart=true \
-autorestart=true \
-stderr_logfile=/var/log/supervisor/backend.err.log \
-stdout_logfile=/var/log/supervisor/backend.out.log \
-environment=PYTHONUNBUFFERED=1 \
-\
-[program:nginx] \
-command=nginx -g "daemon off;" \
-autostart=true \
-autorestart=true \
-stderr_logfile=/var/log/supervisor/nginx.err.log \
-stdout_logfile=/var/log/supervisor/nginx.out.log' > /etc/supervisor/conf.d/supervisord.conf
+# 创建supervisor配置（使用 printf 确保正确的换行符）
+RUN printf '[supervisord]\nnodaemon=true\nlogfile=/var/log/supervisor/supervisord.log\npidfile=/var/run/supervisord.pid\n\n[program:backend]\ncommand=uvicorn app:app --host 0.0.0.0 --port 3000 --workers 2\ndirectory=/app/backend\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/backend.err.log\nstdout_logfile=/var/log/supervisor/backend.out.log\nenvironment=PYTHONUNBUFFERED=1\n\n[program:nginx]\ncommand=nginx -g "daemon off;"\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/nginx.err.log\nstdout_logfile=/var/log/supervisor/nginx.out.log\n' > /etc/supervisor/conf.d/supervisord.conf
 
 # 创建启动脚本（使用 printf 确保正确的换行符）
 RUN printf '#!/bin/bash\nset -e\n\necho "Starting services..."\n\nexec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /app/start.sh && \
