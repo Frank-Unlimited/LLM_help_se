@@ -26,7 +26,7 @@ on:
 # Environment variables available to all jobs and steps in this workflow.
 env:
   REGION_ID: cn-hangzhou
-  REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc
+  REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com
   NAMESPACE: hhc522025320050
   IMAGE: hhc
   TAG: ${{ github.sha }}
