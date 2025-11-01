@@ -25,7 +25,10 @@ const errorLoggerPlugin = () => ({
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), mode === 'development' ? errorLoggerPlugin() : null,],
+  plugins: [
+    react(),
+    ...(mode === 'development' ? [errorLoggerPlugin()] : []),
+  ],
   // 确保所有文件以 UTF-8 编码读取
   esbuild: {
     charset: 'utf8',

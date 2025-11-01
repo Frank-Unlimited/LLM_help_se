@@ -4,15 +4,20 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
+# 设置非交互式环境变量以避免构建过程中的交互提示
+ENV CI=true
+ENV NODE_ENV=production
+
 # 复制前端依赖文件
 COPY package*.json ./
 COPY vite.config.ts ./
 COPY tsconfig*.json ./
 COPY postcss.config.js ./
 COPY tailwind.config.js ./
+COPY eslint.config.js ./
 
 # 安装前端依赖
-RUN npm ci
+RUN npm ci --prefer-offline --no-audit
 
 # 复制前端源代码
 COPY src ./src
