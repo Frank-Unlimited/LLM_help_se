@@ -27,7 +27,6 @@ on:
 env:
   REGION_ID: cn-hangzhou
   REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com
-  NAMESPACE: hhc522025320050
   IMAGE: hhc
   TAG: ${{ github.sha }}
   ACK_CLUSTER_ID: clusterID
