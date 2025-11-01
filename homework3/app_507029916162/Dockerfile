@@ -137,15 +137,8 @@ autorestart=true \
 stderr_logfile=/var/log/supervisor/nginx.err.log \
 stdout_logfile=/var/log/supervisor/nginx.out.log' > /etc/supervisor/conf.d/supervisord.conf
 
-# 创建启动脚本
-RUN echo '#!/bin/bash \
-set -e \
-\
-# 等待数据库等初始化（如果需要） \
-echo "Starting services..." \
-\
-# 启动supervisor（管理nginx和backend） \
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf' > /app/start.sh && \
+# 创建启动脚本（使用 printf 确保正确的换行符）
+RUN printf '#!/bin/bash\nset -e\n\necho "Starting services..."\n\nexec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /app/start.sh && \
     chmod +x /app/start.sh
 
 # 暴露端口
