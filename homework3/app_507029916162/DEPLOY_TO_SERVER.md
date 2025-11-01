@@ -45,6 +45,8 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 
 ### 4. 运行容器
 
+**重要：不要覆盖 CMD，使用默认启动命令**
+
 ```bash
 docker run -d \
   --name tuzhixing-app \
@@ -52,6 +54,11 @@ docker run -d \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
+
+**注意**：
+- ? **不要**添加 `bash -c "cd /app && python app.py"` 等命令
+- ? 容器会自动使用 `/app/start.sh` 启动，它会启动 supervisor 来管理 nginx 和 backend
+- ? backend 在 `/app/backend/app.py`，由 supervisor 自动启动
 
 ### 5. 验证部署
 
@@ -155,13 +162,15 @@ docker rm tuzhixing-app
 # 拉取新镜像
 docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 
-# 运行新容器
+# 运行新容器（使用默认启动命令）
 docker run -d \
   --name tuzhixing-app \
   -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
+
+**注意**：容器会自动启动 supervisor 来管理 nginx 和 backend，无需手动指定启动命令。
 
 ### 进入容器调试
 ```bash
@@ -251,6 +260,33 @@ sudo lsof -i :80
 # 或使用其他端口
 docker run -d --name tuzhixing-app -p 8080:80 ...
 ```
+
+### 问题 4: 容器启动失败 - app.py 找不到
+**错误**: `python: can't open file '/app/app.py': [Errno 2] No such file or directory`
+
+**原因**: 覆盖了容器的默认启动命令
+
+**解决**:
+1. 删除错误的容器：
+   ```bash
+   docker stop tuzhixing-app
+   docker rm tuzhixing-app
+   ```
+
+2. 使用正确的命令（**不要**覆盖 CMD）：
+   ```bash
+   docker run -d \
+     --name tuzhixing-app \
+     -p 80:80 \
+     --restart unless-stopped \
+     crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
+   ```
+
+3. 容器会自动：
+   - 启动 supervisor
+   - supervisor 启动 nginx（端口 80）
+   - supervisor 启动 backend（uvicorn，端口 3000）
+   - backend 在 `/app/backend/app.py`，由 supervisor 管理
 
 ## ? 快速测试
 
