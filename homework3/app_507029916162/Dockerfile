@@ -24,6 +24,8 @@ COPY src ./src
 COPY index.html ./
 # 复制 app 目录（包含语音识别相关文件）
 COPY app ./app
+# 复制 examples 目录（app/speechrecognizer.js 依赖 examples/lib/cryptojs.js）
+COPY examples ./examples
 
 # 构建前端（跳过 TypeScript 类型检查，仅进行构建）
 # Vite 会处理 TypeScript 转译，所以不需要先运行 tsc
