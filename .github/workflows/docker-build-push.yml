@@ -15,79 +15,73 @@ on:
     paths:
       - 'homework3/app_507029916162/**'
       - '.github/workflows/docker-build-push.yml'
-  workflow_dispatch:
+  workflow_dispatch: # 允许手动触发
 
 env:
   DOCKER_REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com
+  IMAGE_NAME: hhc
   IMAGE_NAMESPACE: hhc510105200301150090
-  IMAGE_NAME: travel_plan
   DOCKERFILE_PATH: homework3/app_507029916162/Dockerfile
   BUILD_CONTEXT: homework3/app_507029916162
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          install: true
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Aliyun Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ secrets.ALIYUN_ACR_USERNAME }}
-          password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
-          logout: true
+    - name: Log in to Aliyun Container Registry
+      if: github.event_name != 'pull_request'
+      run: |
+        echo "Logging in to Aliyun Container Registry..."
+        echo "${{ secrets.ALIYUN_ACR_PASSWORD }}" | docker login ${{ env.DOCKER_REGISTRY }} \
+          --username "${{ secrets.ALIYUN_ACR_USERNAME }}" \
+          --password-stdin
+        echo "Login successful!"
 
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix=${{ github.ref_name }}-
-            type=raw,value=latest,enable={{is_default_branch}}
-            # PR标签通过tags直接配置，替代旧版flavor suffix
-            type=ref,event=pr,pattern={{pr}}
-          labels: |
-            org.opencontainers.image.authors=Your Name
-            org.opencontainers.image.description=Travel Plan AI Application
+    - name: Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+        flavor: |
+          suffix=-pr{{number}},onpr=true,priority=1000
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ${{ env.BUILD_CONTEXT }}
-          file: ${{ env.DOCKERFILE_PATH }}
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ env.BUILD_CONTEXT }}
+        file: ${{ env.DOCKERFILE_PATH }}
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
-      - name: Output image info
-        run: |
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            echo "✅ Docker image built successfully (PR build, not pushed)"
-            echo "📦 Image tags (not pushed):"
-            echo "${{ steps.meta.outputs.tags }}"
-          else
-            echo "✅ Docker image built and pushed successfully!"
-            echo "📦 Image tags:"
-            echo "${{ steps.meta.outputs.tags }}"
-            echo ""
-            echo "🔗 ACR Public URL:"
-            echo "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}"
-          fi
+    - name: Output image info
+      run: |
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "? Docker image built successfully (PR build, not pushed)"
+          echo "? Image tags (not pushed):"
+          echo "${{ steps.meta.outputs.tags }}"
+        else
+          echo "? Docker image built and pushed successfully!"
+          echo "? Image tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo ""
+          echo "? Image URL:"
+          echo "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}"
+        fi
+
