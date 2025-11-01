@@ -113,6 +113,13 @@ const MyTripsPage: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setError('请先登录');
+        setIsLoading(false);
+        return;
+      }
+      
       const params: any = {
         page: page,
         limit: pageLimit
@@ -121,7 +128,7 @@ const MyTripsPage: React.FC = () => {
         params.status = statusFilter;
       }
       
-      const response = await api.getUserTrips(params);
+      const response = await api.getUserTrips(userId, params);
       const convertedTrips = response.trips.map(convertTripToTripData);
       setTripsData(convertedTrips);
       setTotalTrips(response.total || 0);
@@ -226,8 +233,14 @@ const MyTripsPage: React.FC = () => {
     setCurrentEditTripId(tripId);
     
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        return;
+      }
+      
       // 获取行程详情
-      const tripDetail = await api.getTripDetail(tripId);
+      const tripDetail = await api.getTripDetail(tripId, userId);
       
       // 填充表单数据
       setEditFormData({
@@ -289,8 +302,14 @@ const MyTripsPage: React.FC = () => {
         updateData.budget = { total: budget };
       }
       
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        return;
+      }
+      
       // 调用API更新行程
-      await api.updateTrip(currentEditTripId, updateData);
+      await api.updateTrip(currentEditTripId, userId, updateData);
       
       // 关闭模态框并重新加载列表
       setShowEditModal(false);
@@ -343,7 +362,12 @@ const MyTripsPage: React.FC = () => {
   const handleConfirmDelete = async () => {
     if (currentDeleteTripId) {
       try {
-        await api.deleteTrip(currentDeleteTripId);
+        const userId = localStorage.getItem('userId');
+        if (!userId) {
+          alert('请先登录');
+          return;
+        }
+        await api.deleteTrip(currentDeleteTripId, userId);
         console.log('删除行程成功:', currentDeleteTripId);
         // 重新加载列表
         await loadTrips();
@@ -426,7 +450,12 @@ const MyTripsPage: React.FC = () => {
     try {
       // 只更新状态
       const updateData = { status: newStatus };
-      await api.updateTrip(tripId, updateData);
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        return;
+      }
+      await api.updateTrip(tripId, userId, updateData);
       
       // 重新加载列表以显示最新状态
       await loadTrips(currentPage);

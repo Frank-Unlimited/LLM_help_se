@@ -66,7 +66,13 @@ def _initialize_coze(force_reload=False):
             return False
         
         # Initialize Coze client
-        coze = Coze(auth=TokenAuth(token=COZE_API_TOKEN), base_url=COZE_API_BASE)
+        # Note: SSL errors may occur due to network issues, we'll handle retries in the workflow functions
+        try:
+            coze = Coze(auth=TokenAuth(token=COZE_API_TOKEN), base_url=COZE_API_BASE)
+        except Exception as e:
+            print(f"[AI Service] Warning: Error initializing Coze client: {str(e)}")
+            # Try without explicit timeout configuration first
+            coze = Coze(auth=TokenAuth(token=COZE_API_TOKEN), base_url=COZE_API_BASE)
         WorkflowEventType = WorkflowEventType  # Make it available globally
         COZE_AVAILABLE = True
         print("[AI Service] Coze workflow initialized successfully")
@@ -383,77 +389,118 @@ def _generate_with_coze_workflow(request_data: Dict[str, Any]) -> Dict[str, Any]
                             )
                         )
     
-    try:
-        # Start workflow run with input
-        stream = coze.workflows.runs.stream(
-            workflow_id=WORKFLOW_ID,
-            parameters=workflow_input
-        )
-        
-        handle_workflow_iterator(stream)
-        
-        if errors:
-            error_msg = f"Coze workflow errors: {errors}"
-            print(f"[Coze Workflow] Workflow completed with errors: {errors}")
-            raise RuntimeError(error_msg)
-        
-        if not messages:
-            error_msg = "No messages received from Coze workflow"
-            print(f"[Coze Workflow] {error_msg}")
-            raise RuntimeError(error_msg)
-        
-        # Combine all messages
-        combined_message = "".join(messages)
-        print(f"[Coze Workflow] Combined message length: {len(combined_message)}")
-        
-        # Try to parse as JSON
+    # Add retry mechanism for SSL/network errors
+    max_retries = 3
+    retry_delay = 2  # seconds
+    
+    for attempt in range(max_retries):
         try:
-            # Remove markdown code blocks if present
-            cleaned_message = combined_message.strip()
-            if cleaned_message.startswith("```json"):
-                cleaned_message = cleaned_message[7:]
-            if cleaned_message.startswith("```"):
-                cleaned_message = cleaned_message[3:]
-            if cleaned_message.endswith("```"):
-                cleaned_message = cleaned_message[:-3]
-            cleaned_message = cleaned_message.strip()
+            # Reset messages and errors for each attempt
+            messages.clear()
+            errors.clear()
             
-            result = json.loads(cleaned_message)
-            print("[Coze Workflow] Successfully parsed JSON response")
-            print(f"[Coze Workflow] Raw result keys: {list(result.keys())}")
+            # Start workflow run with input
+            print(f"[Coze Workflow] Attempt {attempt + 1}/{max_retries}: Starting workflow stream...")
+            stream = coze.workflows.runs.stream(
+                workflow_id=WORKFLOW_ID,
+                parameters=workflow_input
+            )
             
-            # Normalize and extract all fields
-            normalized_result = _normalize_ai_result(result)
-            print("[Coze Workflow] Field extraction complete")
-            _log_extracted_fields(normalized_result)
-            return normalized_result
+            handle_workflow_iterator(stream)
             
-        except json.JSONDecodeError as e:
-            print(f"[Coze Workflow] Failed to parse JSON: {str(e)}")
-            print(f"[Coze Workflow] Raw message: {combined_message[:500]}...")
-            # Try to extract JSON from the message
-            # Look for JSON object in the text
-            json_match = re.search(r'\{.*\}', combined_message, re.DOTALL)
-            if json_match:
-                try:
-                    result = json.loads(json_match.group())
-                    print("[Coze Workflow] Extracted JSON from message")
-                    # Normalize and extract all fields
-                    normalized_result = _normalize_ai_result(result)
-                    _log_extracted_fields(normalized_result)
-                    return normalized_result
-                except json.JSONDecodeError:
-                    pass
-            error_msg = f"Failed to parse JSON from Coze workflow response. Raw message: {combined_message[:500]}"
-            print(f"[Coze Workflow] {error_msg}")
-            raise ValueError(error_msg)
+            # Check for errors after iteration
+            if errors:
+                error_msg = f"Coze workflow errors: {errors}"
+                print(f"[Coze Workflow] Workflow completed with errors: {errors}")
+                if attempt < max_retries - 1:
+                    print(f"[Coze Workflow] Retrying in {retry_delay} seconds...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    raise RuntimeError(error_msg)
             
-    except Exception as e:
-        print(f"[Coze Workflow] Exception during workflow execution: {str(e)}")
-        import traceback
-        print(f"[Coze Workflow] Traceback: {traceback.format_exc()}")
-        # Re-raise the exception instead of returning None
-        raise
+            # Check if we got messages
+            if not messages:
+                if attempt < max_retries - 1:
+                    print(f"[Coze Workflow] No messages received (attempt {attempt + 1}/{max_retries}), retrying...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2
+                    continue
+                else:
+                    error_msg = "No messages received from Coze workflow after retries"
+                    print(f"[Coze Workflow] {error_msg}")
+                    raise RuntimeError(error_msg)
+            
+            # Success - process messages and break out of retry loop
+            # Combine all messages
+            combined_message = "".join(messages)
+            print(f"[Coze Workflow] Combined message length: {len(combined_message)}")
+            
+            # Try to parse as JSON
+            try:
+                # Remove markdown code blocks if present
+                cleaned_message = combined_message.strip()
+                if cleaned_message.startswith("```json"):
+                    cleaned_message = cleaned_message[7:]
+                if cleaned_message.startswith("```"):
+                    cleaned_message = cleaned_message[3:]
+                if cleaned_message.endswith("```"):
+                    cleaned_message = cleaned_message[:-3]
+                cleaned_message = cleaned_message.strip()
+                
+                result = json.loads(cleaned_message)
+                print("[Coze Workflow] Successfully parsed JSON response")
+                print(f"[Coze Workflow] Raw result keys: {list(result.keys())}")
+                
+                # Normalize and extract all fields
+                normalized_result = _normalize_ai_result(result)
+                print("[Coze Workflow] Field extraction complete")
+                _log_extracted_fields(normalized_result)
+                return normalized_result
+                
+            except json.JSONDecodeError as e:
+                print(f"[Coze Workflow] Failed to parse JSON: {str(e)}")
+                print(f"[Coze Workflow] Raw message: {combined_message[:500]}...")
+                # Try to extract JSON from the message
+                # Look for JSON object in the text
+                json_match = re.search(r'\{.*\}', combined_message, re.DOTALL)
+                if json_match:
+                    try:
+                        result = json.loads(json_match.group())
+                        print("[Coze Workflow] Extracted JSON from message")
+                        # Normalize and extract all fields
+                        normalized_result = _normalize_ai_result(result)
+                        _log_extracted_fields(normalized_result)
+                        return normalized_result
+                    except json.JSONDecodeError:
+                        pass
+                error_msg = f"Failed to parse JSON from Coze workflow response. Raw message: {combined_message[:500]}"
+                print(f"[Coze Workflow] {error_msg}")
+                raise ValueError(error_msg)
+            
+        except Exception as stream_error:
+            error_str = str(stream_error).lower()
+            # Check if it's an SSL or network error
+            if any(keyword in error_str for keyword in ['ssl', 'eof', 'protocol', 'connection', 'timeout', 'reset']):
+                if attempt < max_retries - 1:
+                    print(f"[Coze Workflow] SSL/Network error (attempt {attempt + 1}/{max_retries}): {str(stream_error)}")
+                    print(f"[Coze Workflow] Retrying in {retry_delay} seconds...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    print(f"[Coze Workflow] SSL/Network error after {max_retries} attempts: {str(stream_error)}")
+                    raise RuntimeError(
+                        f"网络连接错误，请检查网络连接后重试。如果问题持续，可能是Coze服务暂时不可用。"
+                        f"\n原始错误: {str(stream_error)}"
+                    )
+            else:
+                # Not a network error, re-raise immediately
+                raise
 
 
 def generate_mock_activities(day: int, destination: str, 

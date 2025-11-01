@@ -204,13 +204,16 @@ class SQLiteDatabase:
         finally:
             conn.close()
     
-    def get_trip(self, trip_id: str) -> Optional[TripDetail]:
+    def get_trip(self, trip_id: str, user_id: Optional[str] = None) -> Optional[TripDetail]:
         """Get trip details"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
         try:
-            cursor.execute("SELECT * FROM trips WHERE tripId = ?", (trip_id,))
+            if user_id:
+                cursor.execute("SELECT * FROM trips WHERE tripId = ? AND userId = ?", (trip_id, user_id))
+            else:
+                cursor.execute("SELECT * FROM trips WHERE tripId = ?", (trip_id,))
             row = cursor.fetchone()
             
             if not row:
@@ -258,22 +261,27 @@ class SQLiteDatabase:
                 notes=notes_data,
                 imageUrl=row['imageUrl'],
                 createdAt=row['createdAt'],
-                updatedAt=row['updatedAt']
+                updatedAt=row['updatedAt'],
+                userId=row['userId']
             )
             
             return trip
         finally:
             conn.close()
     
-    def update_trip(self, trip_id: str, updates: dict) -> Optional[TripDetail]:
+    def update_trip(self, trip_id: str, updates: dict, user_id: Optional[str] = None) -> Optional[TripDetail]:
         """Update trip"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
         try:
             # First get the existing trip
-            trip = self.get_trip(trip_id)
+            trip = self.get_trip(trip_id, user_id)
             if not trip:
+                return None
+            
+            # Verify user ownership if user_id is provided
+            if user_id and trip.userId != user_id:
                 return None
             
             # Update fields
@@ -331,23 +339,36 @@ class SQLiteDatabase:
             # Update the database
             if update_fields:
                 update_values.append(trip_id)
-                sql = f"UPDATE trips SET {', '.join(update_fields)} WHERE tripId = ?"
+                if user_id:
+                    sql = f"UPDATE trips SET {', '.join(update_fields)} WHERE tripId = ? AND userId = ?"
+                    update_values.append(user_id)
+                else:
+                    sql = f"UPDATE trips SET {', '.join(update_fields)} WHERE tripId = ?"
                 cursor.execute(sql, update_values)
                 conn.commit()
             
             # Return updated trip
-            return self.get_trip(trip_id)
+            return self.get_trip(trip_id, user_id)
         finally:
             conn.close()
     
-    def delete_trip(self, trip_id: str) -> bool:
+    def delete_trip(self, trip_id: str, user_id: Optional[str] = None) -> bool:
         """Delete trip"""
         conn = self._get_connection()
         cursor = conn.cursor()
         
         try:
+            # Verify ownership if user_id is provided
+            if user_id:
+                trip = self.get_trip(trip_id, user_id)
+                if not trip or trip.userId != user_id:
+                    return False
+            
             # Delete trip (expenses will be automatically deleted due to CASCADE)
-            cursor.execute("DELETE FROM trips WHERE tripId = ?", (trip_id,))
+            if user_id:
+                cursor.execute("DELETE FROM trips WHERE tripId = ? AND userId = ?", (trip_id, user_id))
+            else:
+                cursor.execute("DELETE FROM trips WHERE tripId = ?", (trip_id,))
             deleted = cursor.rowcount > 0
             conn.commit()
             return deleted
@@ -535,7 +556,7 @@ class SQLiteDatabase:
             conn.close()
     
     def get_all_trips(self, status: Optional[str] = None, 
-                      page: int = 1, limit: int = 10) -> tuple:
+                      page: int = 1, limit: int = 10, user_id: Optional[str] = None) -> tuple:
         """Get all trips (support filtering and pagination)"""
         conn = self._get_connection()
         cursor = conn.cursor()
@@ -544,6 +565,10 @@ class SQLiteDatabase:
             # Build query
             where_clause = "WHERE 1=1"
             params = []
+            
+            if user_id:
+                where_clause += " AND userId = ?"
+                params.append(user_id)
             
             if status:
                 where_clause += " AND status = ?"
@@ -563,7 +588,7 @@ class SQLiteDatabase:
             
             trips_list = []
             for row in cursor.fetchall():
-                trip = self.get_trip(row['tripId'])
+                trip = self.get_trip(row['tripId'], user_id)
                 if trip:
                     trips_list.append(trip)
             

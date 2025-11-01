@@ -122,8 +122,15 @@ const PlanDetailPage: React.FC = () => {
       //    - notes: AI温馨提示（数组）
       //
       // 调用后端接口获取行程详情
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        navigate('/home');
+        return;
+      }
+      
       setIsLoading(true);
-      api.getTripDetail(tripId)
+      api.getTripDetail(tripId, userId)
         .then(data => {
           console.log('行程数据加载成功:', data);
           setTripData(data);
@@ -189,8 +196,14 @@ const PlanDetailPage: React.FC = () => {
     setIsUpdatingStatus(true);
     try {
       // 只更新状态
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        return;
+      }
+      
       const updateData = { status: newStatus };
-      const updatedTrip = await api.updateTrip(tripId, updateData);
+      const updatedTrip = await api.updateTrip(tripId, userId, updateData);
       
       // 更新本地状态
       setTripData(updatedTrip);
@@ -265,7 +278,13 @@ const PlanDetailPage: React.FC = () => {
       }
 
       // 调用API更新行程
-      const updatedTrip = await api.updateTrip(tripId, updateData);
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        return;
+      }
+      
+      const updatedTrip = await api.updateTrip(tripId, userId, updateData);
       
       // 更新本地状态
       setTripData(updatedTrip);

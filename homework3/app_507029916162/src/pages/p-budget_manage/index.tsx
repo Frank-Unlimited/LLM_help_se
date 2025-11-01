@@ -120,7 +120,14 @@ const BudgetManagePage: React.FC = () => {
     setError(null);
     
     try {
-      const detail = await api.getTripDetail(tripId);
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setError('请先登录');
+        setIsLoading(false);
+        return;
+      }
+      
+      const detail = await api.getTripDetail(tripId, userId);
       setTripDetail(detail);
       
       // 转换行程数据
@@ -160,7 +167,14 @@ const BudgetManagePage: React.FC = () => {
     setIsLoadingTrips(true);
     setTripsError(null);
     try {
-      const response = await api.getUserTrips({ limit: 100 });
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        setTripsError('请先登录');
+        setIsLoadingTrips(false);
+        return;
+      }
+      
+      const response = await api.getUserTrips(userId, { limit: 100 });
       setTripsList(response.trips || []);
     } catch (err) {
       console.error('加载行程列表失败:', err);
@@ -323,9 +337,15 @@ const BudgetManagePage: React.FC = () => {
     }
 
     try {
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        return;
+      }
+      
       console.log('[前端] 准备删除开销:', { tripId, expenseId: id });
       // 调用后端删除开销API - 确保后端数据被删除
-      await api.deleteExpense(tripId, id);
+      await api.deleteExpense(tripId, id, userId);
       
       // 重新加载数据以同步后端状态
       await loadTripData(tripId);
@@ -357,10 +377,17 @@ const BudgetManagePage: React.FC = () => {
         description: formData.description || ''
       };
 
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        alert('请先登录');
+        setIsSubmitting(false);
+        return;
+      }
+      
       if (isEditing && editingExpenseId) {
         // 编辑模式 - 尝试调用更新接口
         try {
-          await api.updateExpense(tripId, editingExpenseId, expenseData);
+          await api.updateExpense(tripId, editingExpenseId, userId, expenseData);
           console.log('更新开销成功');
         } catch (updateErr) {
           // 如果后端不支持更新接口，使用删除后重新添加的方式
@@ -368,13 +395,13 @@ const BudgetManagePage: React.FC = () => {
             console.log('后端不支持更新接口，使用删除后重新添加的方式');
             // 先删除旧的
             try {
-              await api.deleteExpense(tripId, editingExpenseId);
+              await api.deleteExpense(tripId, editingExpenseId, userId);
             } catch (deleteErr) {
               // 如果删除也失败，直接添加新的（不删除旧的）
               console.warn('删除旧记录失败，直接添加新记录');
             }
             // 添加新的
-            await api.addExpense(tripId, expenseData);
+            await api.addExpense(tripId, userId, expenseData);
             console.log('通过删除后添加的方式更新开销成功');
           } else {
             throw updateErr;
@@ -382,7 +409,7 @@ const BudgetManagePage: React.FC = () => {
         }
       } else {
         // 添加模式
-        await api.addExpense(tripId, expenseData);
+        await api.addExpense(tripId, userId, expenseData);
         console.log('添加开销成功');
       }
       
@@ -691,7 +718,13 @@ const BudgetManagePage: React.FC = () => {
         description: parsedExpense.description || ''
       };
       
-      await api.addExpense(tripId, expenseData);
+      const userId = localStorage.getItem('userId');
+      if (!userId) {
+        console.error('用户未登录，无法保存开销');
+        return;
+      }
+      
+      await api.addExpense(tripId, userId, expenseData);
       console.log('[前端] 开销已自动保存:', expenseData);
       
       // 重新加载数据以获取最新的预算和开销信息

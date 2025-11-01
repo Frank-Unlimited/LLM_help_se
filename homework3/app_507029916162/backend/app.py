@@ -542,14 +542,15 @@ async def generate_trip(request: TripGenerationRequest):
             notes=notes,
             imageUrl=image_url,
             createdAt=datetime.now().isoformat(),
-            updatedAt=datetime.now().isoformat()
+            updatedAt=datetime.now().isoformat(),
+            userId=request.userId
         )
         
         db = get_db()
         db.create_trip(trip)
         
         # Verify trip was saved
-        saved_trip = db.get_trip(trip_id)
+        saved_trip = db.get_trip(trip_id, request.userId)
         if saved_trip:
             print(f"[API] Trip saved to database successfully (verified)")
             print(f"[API] Database now contains {db.get_trips_count()} trip(s)")
@@ -574,20 +575,14 @@ async def generate_trip(request: TripGenerationRequest):
         raise HTTPException(status_code=500, detail=f"Failed to generate trip: {error_detail}")
 
 @app.get("/api/trips/{trip_id}", response_model=TripDetail)
-async def get_trip_detail(trip_id: str):
-    print(f"\n[API] GET /api/trips/{trip_id} - Request received")
+async def get_trip_detail(trip_id: str, userId: str = Query(..., description="User ID")):
+    print(f"\n[API] GET /api/trips/{trip_id} - Request received for userId: {userId}")
     
     db = get_db()
-    trips_count = db.get_trips_count()
-    print(f"[API] Database contains {trips_count} trip(s)")
-    if trips_count > 0:
-        trip_ids = db.get_all_trip_ids()
-        print(f"[API] Available trip IDs: {trip_ids[:5]}...")  # Show first 5 for debugging
-    
-    trip = db.get_trip(trip_id)
+    trip = db.get_trip(trip_id, userId)
     
     if not trip:
-        print(f"[API] Trip not found: {trip_id}")
+        print(f"[API] Trip not found or access denied: {trip_id} for userId: {userId}")
         raise HTTPException(status_code=404, detail=f"Trip not found: {trip_id}")
     
     # Get expenses from database
@@ -601,10 +596,11 @@ async def get_trip_detail(trip_id: str):
     return trip
 
 @app.put("/api/trips/{trip_id}", response_model=TripDetail)
-async def update_trip(trip_id: str, updates: TripUpdateRequest):
+async def update_trip(trip_id: str, updates: TripUpdateRequest, userId: str = Query(..., description="User ID")):
+    print(f"\n[API] PUT /api/trips/{trip_id} - Request received for userId: {userId}")
     db = get_db()
     update_data = {k: v for k, v in updates.dict().items() if v is not None}
-    trip = db.update_trip(trip_id, update_data)
+    trip = db.update_trip(trip_id, update_data, userId)
     
     if not trip:
         raise HTTPException(status_code=404, detail=f"Trip not found: {trip_id}")
@@ -612,9 +608,10 @@ async def update_trip(trip_id: str, updates: TripUpdateRequest):
     return trip
 
 @app.delete("/api/trips/{trip_id}", response_model=DeleteResponse)
-async def delete_trip(trip_id: str):
+async def delete_trip(trip_id: str, userId: str = Query(..., description="User ID")):
+    print(f"\n[API] DELETE /api/trips/{trip_id} - Request received for userId: {userId}")
     db = get_db()
-    success = db.delete_trip(trip_id)
+    success = db.delete_trip(trip_id, userId)
     
     if not success:
         raise HTTPException(status_code=404, detail=f"Trip not found: {trip_id}")
@@ -622,9 +619,9 @@ async def delete_trip(trip_id: str):
     return DeleteResponse(success=True, message="Trip deleted successfully")
 
 @app.post("/api/trips/{trip_id}/expenses", response_model=ExpenseCreateResponse)
-async def add_expense(trip_id: str, expense_data: ExpenseCreateRequest):
+async def add_expense(trip_id: str, expense_data: ExpenseCreateRequest, userId: str = Query(..., description="User ID")):
     db = get_db()
-    trip = db.get_trip(trip_id)
+    trip = db.get_trip(trip_id, userId)
     
     if not trip:
         raise HTTPException(status_code=404, detail=f"Trip not found: {trip_id}")
@@ -639,7 +636,7 @@ async def add_expense(trip_id: str, expense_data: ExpenseCreateRequest):
     )
     
     db.add_expense(trip_id, expense)
-    updated_trip = db.get_trip(trip_id)
+    updated_trip = db.get_trip(trip_id, userId)
     
     return ExpenseCreateResponse(
         expenseId=expense.expenseId,
@@ -649,13 +646,14 @@ async def add_expense(trip_id: str, expense_data: ExpenseCreateRequest):
 
 @app.put("/api/trips/{trip_id}/expenses/{expense_id}", response_model=ExpenseCreateResponse)
 async def update_expense(
-    trip_id: str, 
-    expense_id: str, 
-    expense_data: ExpenseCreateRequest
+    trip_id: str,
+    expense_id: str,
+    expense_data: ExpenseCreateRequest,
+    userId: str = Query(..., description="User ID")
 ):
     """Update an existing expense record"""
     db = get_db()
-    trip = db.get_trip(trip_id)
+    trip = db.get_trip(trip_id, userId)
     
     if not trip:
         raise HTTPException(status_code=404, detail=f"Trip not found: {trip_id}")
@@ -678,7 +676,7 @@ async def update_expense(
         )
     
     # Get updated trip to return new budget
-    updated_trip = db.get_trip(trip_id)
+    updated_trip = db.get_trip(trip_id, userId)
     
     return ExpenseCreateResponse(
         expenseId=updated_expense.expenseId,
@@ -687,11 +685,11 @@ async def update_expense(
     )
 
 @app.delete("/api/trips/{trip_id}/expenses/{expense_id}", response_model=DeleteResponse)
-async def delete_expense(trip_id: str, expense_id: str):
+async def delete_expense(trip_id: str, expense_id: str, userId: str = Query(..., description="User ID")):
     """Delete an expense record"""
-    print(f"\n[API] DELETE /api/trips/{trip_id}/expenses/{expense_id} - Request received")
+    print(f"\n[API] DELETE /api/trips/{trip_id}/expenses/{expense_id} - Request received for userId: {userId}")
     db = get_db()
-    trip = db.get_trip(trip_id)
+    trip = db.get_trip(trip_id, userId)
     
     if not trip:
         print(f"[API] Trip not found: {trip_id}")
@@ -744,12 +742,14 @@ async def parse_expense_voice(request: ExpenseVoiceParseRequest):
 
 @app.get("/api/trips", response_model=TripsListResponse)
 async def get_trips_list(
+    userId: str = Query(..., description="User ID"),
     status: Optional[str] = Query(None, description="Filter by status"),
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100)
 ):
+    print(f"\n[API] GET /api/trips - Request received for userId: {userId}")
     db = get_db()
-    trips, total = db.get_all_trips(status=status, page=page, limit=limit)
+    trips, total = db.get_all_trips(status=status, page=page, limit=limit, user_id=userId)
     
     trips_summary = [
         TripSummary(

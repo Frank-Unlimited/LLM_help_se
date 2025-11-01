@@ -113,6 +113,7 @@ class TripDetail(BaseModel):
     imageUrl: Optional[str] = None
     createdAt: Optional[str] = None
     updatedAt: Optional[str] = None
+    userId: Optional[str] = None
 
 
 class TripSummary(BaseModel):

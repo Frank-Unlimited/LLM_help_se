@@ -250,6 +250,15 @@ const PlanInputPage: React.FC = () => {
       return;
     }
     
+    // 检查用户是否登录
+    const userId = localStorage.getItem('userId');
+    if (!userId) {
+      alert('请先登录后再生成行程');
+      // 可以跳转到登录页面
+      // navigate('/login');
+      return;
+    }
+    
     // 检查出发时间，如果没有填写则弹出确认对话框
     if (!departureDate.trim()) {
       const shouldContinue = window.confirm('您没有选择出发时间，是否继续生成行程？\n\n点击"确定"继续生成，点击"取消"返回填写。');
@@ -266,9 +275,6 @@ const PlanInputPage: React.FC = () => {
       const travelTypeIds = ['food', 'shopping', 'history', 'nature', 'family', 'solo', 'photography', 'culture'];
       const transportIds = ['high-speed-rail', 'plane', 'self-drive', 'bus'];
       const accommodationIds = ['economic', 'comfortable', 'luxury', 'homestay'];
-      
-      // 获取当前登录用户的ID
-      const userId = localStorage.getItem('userId') || undefined;
       
       // 整合用户填写的信息到requirementsText中
       let enhancedRequirements = requirements;
@@ -302,7 +308,7 @@ const PlanInputPage: React.FC = () => {
         transportPreference: preferencesArray.filter(p => transportIds.includes(p)),
         accommodationType: preferencesArray.filter(p => accommodationIds.includes(p)),
         currency: 'CNY',
-        userId: userId, // 如果用户已登录，传递userId
+        userId: userId, // 传递当前登录用户的ID
       };
       
       console.log('发送行程生成请求:', requestBody);

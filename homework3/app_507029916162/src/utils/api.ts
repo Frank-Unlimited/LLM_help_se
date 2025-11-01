@@ -147,23 +147,23 @@ export const api = {
   },
   
   // 获取行程详情
-  getTripDetail: async (tripId: string): Promise<TripDetail> => {
-    return fetchAPI<TripDetail>(`/trips/${tripId}`, {
+  getTripDetail: async (tripId: string, userId: string): Promise<TripDetail> => {
+    return fetchAPI<TripDetail>(`/trips/${tripId}?userId=${userId}`, {
       method: 'GET',
     });
   },
   
   // 更新行程
-  updateTrip: async (tripId: string, data: Partial<TripDetail>): Promise<TripDetail> => {
-    return fetchAPI<TripDetail>(`/trips/${tripId}`, {
+  updateTrip: async (tripId: string, userId: string, data: Partial<TripDetail>): Promise<TripDetail> => {
+    return fetchAPI<TripDetail>(`/trips/${tripId}?userId=${userId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   },
   
   // 删除行程
-  deleteTrip: async (tripId: string): Promise<{ success: boolean }> => {
-    return fetchAPI<{ success: boolean }>(`/trips/${tripId}`, {
+  deleteTrip: async (tripId: string, userId: string): Promise<{ success: boolean }> => {
+    return fetchAPI<{ success: boolean }>(`/trips/${tripId}?userId=${userId}`, {
       method: 'DELETE',
     });
   },
@@ -171,6 +171,7 @@ export const api = {
   // 记录开销
   addExpense: async (
     tripId: string,
+    userId: string,
     expense: {
       amount: number;
       category: string;
@@ -178,7 +179,7 @@ export const api = {
       description?: string;
     }
   ): Promise<{ expenseId: string }> => {
-    return fetchAPI<{ expenseId: string }>(`/trips/${tripId}/expenses`, {
+    return fetchAPI<{ expenseId: string }>(`/trips/${tripId}/expenses?userId=${userId}`, {
       method: 'POST',
       body: JSON.stringify(expense),
     });
@@ -188,6 +189,7 @@ export const api = {
   updateExpense: async (
     tripId: string,
     expenseId: string,
+    userId: string,
     expense: {
       amount: number;
       category: string;
@@ -195,7 +197,7 @@ export const api = {
       description?: string;
     }
   ): Promise<{ expenseId: string }> => {
-    return fetchAPI<{ expenseId: string }>(`/trips/${tripId}/expenses/${expenseId}`, {
+    return fetchAPI<{ expenseId: string }>(`/trips/${tripId}/expenses/${expenseId}?userId=${userId}`, {
       method: 'PUT',
       body: JSON.stringify(expense),
     });
@@ -204,9 +206,10 @@ export const api = {
   // 删除开销
   deleteExpense: async (
     tripId: string,
-    expenseId: string
+    expenseId: string,
+    userId: string
   ): Promise<{ success: boolean }> => {
-    return fetchAPI<{ success: boolean }>(`/trips/${tripId}/expenses/${expenseId}`, {
+    return fetchAPI<{ success: boolean }>(`/trips/${tripId}/expenses/${expenseId}?userId=${userId}`, {
       method: 'DELETE',
     });
   },
@@ -232,20 +235,21 @@ export const api = {
   },
   
   // 获取用户所有行程
-  getUserTrips: async (params?: {
-    status?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{
+  getUserTrips: async (
+    userId: string,
+    params?: {
+      status?: string;
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<{
     trips: Array<Partial<TripDetail>>;
     total: number;
     page: number;
     limit: number;
   }> => {
-    const queryString = params 
-      ? '?' + new URLSearchParams(params as any).toString()
-      : '';
-    return fetchAPI<any>(`/trips${queryString}`, {
+    const queryParams = new URLSearchParams({ userId, ...(params || {}) });
+    return fetchAPI<any>(`/trips?${queryParams.toString()}`, {
       method: 'GET',
     });
   },
