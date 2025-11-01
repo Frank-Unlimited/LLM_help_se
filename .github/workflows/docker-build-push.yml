@@ -15,7 +15,7 @@ on:
     paths:
       - 'homework3/app_507029916162/**'
       - '.github/workflows/docker-build-push.yml'
-  workflow_dispatch: # 允许手动触发
+  workflow_dispatch: # 鍏佽鎵嬪姩瑙﹀彂
 
 env:
   DOCKER_REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com
