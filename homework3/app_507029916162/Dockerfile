@@ -54,9 +54,10 @@ RUN apt-get update && apt-get install -y \
 COPY backend/requirements.txt ./backend/
 
 # 安装Python依赖
-# 使用 PYTHONIOENCODING 确保正确处理 requirements.txt
-RUN PYTHONIOENCODING=utf-8 pip install --no-cache-dir -r backend/requirements.txt && \
-    pip install --no-cache-dir python-dotenv
+# 使用 Python -m pip 确保使用正确的 Python 环境和编码
+RUN python -m pip install --upgrade pip setuptools wheel && \
+    python -m pip install --no-cache-dir -r backend/requirements.txt && \
+    python -m pip install --no-cache-dir python-dotenv
 
 # 复制后端代码
 COPY backend ./backend
