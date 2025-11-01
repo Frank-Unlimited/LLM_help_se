@@ -1,54 +1,86 @@
-# This workflow will build and push a new container image to Alibaba Cloud Container Registry (ACR),
-# and then will deploy it to Alibaba Cloud Container Service for Kubernetes (ACK), when there is a push to the "main" branch.
-#
-# To use this workflow, you will need to complete the following set-up steps:
-#
-# 1. Create an ACR repository to store your container images.
-#    You can use ACR EE instance for more security and better performance.
-#    For instructions see https://www.alibabacloud.com/help/doc-detail/142168.htm
-#
-# 2. Create an ACK cluster to run your containerized application.
-#    You can use ACK Pro cluster for more security and better performance.
-#    For instructions see https://www.alibabacloud.com/help/doc-detail/95108.htm
-#
-# 3. Store your AccessKey pair in GitHub Actions secrets named `ACCESS_KEY_ID` and `ACCESS_KEY_SECRET`.
-#    For instructions on setting up secrets see: https://developer.github.com/actions/managing-workflows/storing-secrets/
-#
-# 4. Change the values for the REGION_ID, REGISTRY, NAMESPACE, IMAGE, ACK_CLUSTER_ID, and ACK_DEPLOYMENT_NAME.
-#
-
-name: Build and Deploy to ACK
+name: Build and Push Docker Image to Aliyun ACR
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
+      - master
+    paths:
+      - 'homework3/app_507029916162/**'
+      - '.github/workflows/docker-build-push.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'homework3/app_507029916162/**'
+      - '.github/workflows/docker-build-push.yml'
+  workflow_dispatch: # 允许手动触发
 
-# Environment variables available to all jobs and steps in this workflow.
 env:
-  REGION_ID: cn-hangzhou
-  REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com
-  IMAGE: hhc
-  TAG: ${{ github.sha }}  # 建议用 commit SHA，自动更新
-
-permissions:
-  contents: read
+  DOCKER_REGISTRY: crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com
+  IMAGE_NAME: hhc
+  IMAGE_NAMESPACE: hhc510105200301150090
+  DOCKERFILE_PATH: homework3/app_507029916162/Dockerfile
+  BUILD_CONTEXT: homework3/app_507029916162
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      # 关键：用 docker login 手动登录个人版 ACR
-      - name: Manual login to ACR Personal
-        run: |
-          docker login ${{ env.REGISTRY }} \
-            -u ${{ secrets.ACCESS_KEY_ID }} \
-            -p ${{ secrets.ACCESS_KEY_SECRET }}
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      # 构建并推送镜像
-      - name: Build and push image
-        run: |
-          docker build -t ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.TAG }} .
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ env.TAG }}
+    - name: Log in to Aliyun Container Registry
+      if: github.event_name != 'pull_request'
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.DOCKER_REGISTRY }}
+        username: ${{ secrets.ALIYUN_ACR_USERNAME }}
+        password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+
+    - name: Extract metadata (tags, labels)
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+        flavor: |
+          suffix=-pr{{number}},onpr=true
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: ${{ env.BUILD_CONTEXT }}
+        file: ${{ env.DOCKERFILE_PATH }}
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache
+        cache-to: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+    - name: Output image info
+      run: |
+        if [ "${{ github.event_name }}" == "pull_request" ]; then
+          echo "✅ Docker image built successfully (PR build, not pushed)"
+          echo "📦 Image tags (not pushed):"
+          echo "${{ steps.meta.outputs.tags }}"
+        else
+          echo "✅ Docker image built and pushed successfully!"
+          echo "📦 Image tags:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo ""
+          echo "🔗 Image URL:"
+          echo "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}"
+        fi
+
