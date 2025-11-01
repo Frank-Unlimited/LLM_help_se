@@ -217,10 +217,77 @@ docker exec -it tuzhixing-app /bin/bash
      crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
    ```
 
-4. **HTTPS 配置**（生产环境推荐）：
-   - 使用 Nginx 反向代理配置 SSL
-   - 使用 Let's Encrypt 免费证书
-   - 或使用阿里云 SSL 证书
+4. **HTTPS 配置**（生产环境推荐，语音功能必需）：
+   
+   **为什么需要 HTTPS？**
+   - Chrome 浏览器安全策略：麦克风和语音识别功能只能在 HTTPS 或 localhost 环境下使用
+   - 通过公网 IP 访问时，必须使用 HTTPS 才能使用语音输入功能
+   
+   **方案 1：使用 Nginx + Let's Encrypt 免费证书（推荐）**
+   
+   安装 certbot：
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get update
+   sudo apt-get install certbot python3-certbot-nginx
+   
+   # CentOS/RHEL
+   sudo yum install certbot python3-certbot-nginx
+   ```
+   
+   配置域名 DNS 解析（将域名 A 记录指向服务器公网 IP）
+   
+   获取 SSL 证书：
+   ```bash
+   sudo certbot --nginx -d your-domain.com
+   ```
+   
+   自动续期：
+   ```bash
+   sudo certbot renew --dry-run
+   ```
+   
+   **方案 2：使用阿里云 SSL 证书**
+   
+   1. 在阿里云控制台申请 SSL 证书（免费 DV 证书）
+   2. 下载证书文件（nginx 格式）
+   3. 配置 Nginx SSL（见下方完整配置示例）
+   
+   **完整 Nginx HTTPS 配置示例**：
+   
+   创建 `/etc/nginx/sites-available/tuzhixing`：
+   ```nginx
+   server {
+       listen 80;
+       server_name your-domain.com;
+       return 301 https://$server_name$request_uri;
+   }
+   
+   server {
+       listen 443 ssl http2;
+       server_name your-domain.com;
+   
+       ssl_certificate /path/to/certificate.crt;
+       ssl_certificate_key /path/to/private.key;
+       ssl_protocols TLSv1.2 TLSv1.3;
+       ssl_ciphers HIGH:!aNULL:!MD5;
+   
+       location / {
+           proxy_pass http://127.0.0.1:80;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+   
+   启用配置：
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/tuzhixing /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl reload nginx
+   ```
 
 ## ? 检查应用状态
 
@@ -260,33 +327,6 @@ sudo lsof -i :80
 # 或使用其他端口
 docker run -d --name tuzhixing-app -p 8080:80 ...
 ```
-
-### 问题 4: 容器启动失败 - app.py 找不到
-**错误**: `python: can't open file '/app/app.py': [Errno 2] No such file or directory`
-
-**原因**: 覆盖了容器的默认启动命令
-
-**解决**:
-1. 删除错误的容器：
-   ```bash
-   docker stop tuzhixing-app
-   docker rm tuzhixing-app
-   ```
-
-2. 使用正确的命令（**不要**覆盖 CMD）：
-   ```bash
-   docker run -d \
-     --name tuzhixing-app \
-     -p 80:80 \
-     --restart unless-stopped \
-     crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
-   ```
-
-3. 容器会自动：
-   - 启动 supervisor
-   - supervisor 启动 nginx（端口 80）
-   - supervisor 启动 backend（uvicorn，端口 3000）
-   - backend 在 `/app/backend/app.py`，由 supervisor 管理
 
 ## ? 快速测试
 
