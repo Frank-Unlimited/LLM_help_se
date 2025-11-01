@@ -71,15 +71,15 @@ jobs:
     - name: Output image info
       run: |
         if [ "${{ github.event_name }}" == "pull_request" ]; then
-          echo "? Docker image built successfully (PR build, not pushed)"
-          echo "? Image tags (not pushed):"
+          echo "✅ Docker image built successfully (PR build, not pushed)"
+          echo "📦 Image tags (not pushed):"
           echo "${{ steps.meta.outputs.tags }}"
         else
-          echo "? Docker image built and pushed successfully!"
-          echo "? Image tags:"
+          echo "✅ Docker image built and pushed successfully!"
+          echo "📦 Image tags:"
           echo "${{ steps.meta.outputs.tags }}"
           echo ""
-          echo "? Image URL:"
+          echo "🔗 Image URL:"
           echo "${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.IMAGE_NAME }}"
         fi
 
