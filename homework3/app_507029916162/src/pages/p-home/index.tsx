@@ -602,7 +602,7 @@ const HomePage: React.FC = () => {
                       value={frontendConfig.VITE_ASR_SECRET_ID}
                       onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_ASR_SECRET_ID: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="AKID..."
+                      placeholder="请输入腾讯云 Secret ID"
                     />
                   </div>
                   <div>
@@ -614,7 +614,7 @@ const HomePage: React.FC = () => {
                       value={frontendConfig.VITE_ASR_SECRET_KEY}
                       onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_ASR_SECRET_KEY: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="sb9..."
+                      placeholder="请输入腾讯云 Secret Key"
                     />
                   </div>
                   <div>
@@ -626,7 +626,7 @@ const HomePage: React.FC = () => {
                       value={frontendConfig.VITE_ASR_APP_ID}
                       onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_ASR_APP_ID: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="1310310414"
+                      placeholder="请输入腾讯云 App ID"
                     />
                   </div>
                   <div>
@@ -638,7 +638,7 @@ const HomePage: React.FC = () => {
                       value={frontendConfig.VITE_AMAP_API_KEY}
                       onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_AMAP_API_KEY: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="52dd846396088bec9ffbdb6f06760c22"
+                      placeholder="请输入高德地图 API Key"
                     />
                   </div>
                   <div>
@@ -650,7 +650,7 @@ const HomePage: React.FC = () => {
                       value={frontendConfig.VITE_AMAP_SECURITY_JS_CODE}
                       onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_AMAP_SECURITY_JS_CODE: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="f99450c170e1b26951ad24c3c66840f8"
+                      placeholder="请输入高德地图 Security JS Code"
                     />
                   </div>
                   <button
@@ -679,7 +679,7 @@ const HomePage: React.FC = () => {
                       value={backendConfig.COZE_API_TOKEN}
                       onChange={(e) => setBackendConfig({ ...backendConfig, COZE_API_TOKEN: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="pat_kHM3rm8CbTqUuDk5JoSGVErqFGkiP0Q5uq2qW0qpr4zVER79upO0lLgLNIdiTlGN"
+                      placeholder="请输入 Coze API Token"
                     />
                   </div>
                   <div>
@@ -691,7 +691,7 @@ const HomePage: React.FC = () => {
                       value={backendConfig.COZE_WORKFLOW_ID}
                       onChange={(e) => setBackendConfig({ ...backendConfig, COZE_WORKFLOW_ID: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="7566908212949270528"
+                      placeholder="请输入 Coze Workflow ID"
                     />
                   </div>
                   <div>
@@ -703,7 +703,7 @@ const HomePage: React.FC = () => {
                       value={backendConfig.COZE_EXPENSE_WORKFLOW_ID}
                       onChange={(e) => setBackendConfig({ ...backendConfig, COZE_EXPENSE_WORKFLOW_ID: e.target.value })}
                       className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                      placeholder="7567323652867375167"
+                      placeholder="请输入 Coze Expense Workflow ID"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
