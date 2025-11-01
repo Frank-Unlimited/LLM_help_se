@@ -1,0 +1,40 @@
+
+
+.pageWrapper {
+  background-color: #F9FAFB;
+  min-height: 100vh;
+}
+
+.sidebarTransition {
+  transition: width 0.3s ease-in-out;
+}
+
+.cardHover:hover {
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
+}
+
+.gradientBg {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.preferenceTag {
+  transition: all 0.2s ease;
+}
+
+.preferenceTag.selected {
+  background-color: #3B82F6;
+  color: white;
+  border-color: #3B82F6;
+}
+
+.avatarUpload:hover {
+  opacity: 0.8;
+}
+
+.formInputFocus:focus {
+  outline: none;
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+

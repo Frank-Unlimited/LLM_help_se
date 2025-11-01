@@ -1,0 +1,65 @@
+/* Navigation page styles */
+#container {
+  width: 100%;
+  height: 100%;
+}
+
+#walking-panel {
+  position: absolute;
+  background-color: white;
+  max-height: 90%;
+  overflow-y: auto;
+  top: 10px;
+  right: 10px;
+  width: 280px;
+  border-radius: 4px;
+}
+
+#walking-panel .amap-call {
+  background-color: #009cf9;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+#walking-panel .amap-lib-walking {
+  border-bottom-left-radius: 4px;
+  border-bottom-right-radius: 4px;
+  overflow: hidden;
+}
+
+.mapContainer {
+  width: 100%;
+  height: 100%;
+  min-height: 500px;
+}
+
+.panelContainer {
+  width: 280px;
+  max-width: calc(100% - 2rem);
+}
+
+#place-search-panel {
+  display: none;
+}
+
+.placeSearchPanel {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  #walking-panel {
+    width: calc(100% - 2rem);
+    max-width: 280px;
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    top: auto;
+    max-height: 50vh;
+  }
+  
+  #place-search-panel {
+    width: calc(100% - 2rem);
+    max-width: 280px;
+  }
+}
+

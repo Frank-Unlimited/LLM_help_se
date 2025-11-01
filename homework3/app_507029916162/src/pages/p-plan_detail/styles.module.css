@@ -1,0 +1,61 @@
+
+
+.pageWrapper {
+  background-color: #F9FAFB;
+  min-height: 100vh;
+}
+
+.sidebarTransition {
+  transition: width 0.3s ease-in-out;
+}
+
+.cardHover:hover {
+  transform: translateY(-2px);
+  transition: all 0.3s ease;
+}
+
+.gradientBg {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.activityItem:hover {
+  background-color: #F3F4F6;
+  transition: background-color 0.2s ease;
+}
+
+.timelineLine {
+  position: relative;
+}
+
+.timelineLine::before {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 40px;
+  bottom: -10px;
+  width: 2px;
+  background-color: #E5E7EB;
+}
+
+.timelineItem:last-child .timelineLine::before {
+  display: none;
+}
+
+.editMode .editable {
+  border: 2px dashed #3B82F6;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.editMode .editable:hover {
+  background-color: #EFF6FF;
+}
+
+.modalOverlay {
+  backdrop-filter: blur(4px);
+}
+
+.drawerOverlay {
+  backdrop-filter: blur(2px);
+}
+
