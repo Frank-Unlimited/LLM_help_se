@@ -37,11 +37,12 @@ jobs:
 
     - name: Log in to Aliyun Container Registry
       if: github.event_name != 'pull_request'
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.DOCKER_REGISTRY }}
-        username: ${{ secrets.ALIYUN_ACR_USERNAME }}
-        password: ${{ secrets.ALIYUN_ACR_PASSWORD }}
+      run: |
+        echo "Logging in to Aliyun Container Registry..."
+        echo "${{ secrets.ALIYUN_ACR_PASSWORD }}" | docker login ${{ env.DOCKER_REGISTRY }} \
+          --username "${{ secrets.ALIYUN_ACR_USERNAME }}" \
+          --password-stdin
+        echo "Login successful!"
 
     - name: Extract metadata (tags, labels)
       id: meta
