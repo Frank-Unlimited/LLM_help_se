@@ -5,53 +5,86 @@ AI Service: Generate itinerary using LLM via Coze Workflow
 import os
 import json
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 from datetime import datetime, timedelta
 import uuid
 import random
 
-# Coze workflow integration - Required, no fallback
+# Import types for type checking only (lazy import for runtime)
+if TYPE_CHECKING:
+    from cozepy import Stream, WorkflowEvent, WorkflowEventType
+else:
+    # Placeholder types for runtime (will be imported when needed)
+    Stream = None
+    WorkflowEvent = None
+    WorkflowEventType = None
+
+# Coze workflow integration - Lazy initialization
+# Allow backend to start without Coze config, check when actually used
+COZE_AVAILABLE = False
+coze = None
+COZE_API_TOKEN = None
+COZE_API_BASE = None
+WORKFLOW_ID = None
+EXPENSE_WORKFLOW_ID = None
+WorkflowEventType = None  # Will be set when Coze is initialized
+
+def _initialize_coze(force_reload=False):
+    """Initialize Coze workflow - called when actually needed"""
+    global COZE_AVAILABLE, coze, COZE_API_TOKEN, COZE_API_BASE, WORKFLOW_ID, EXPENSE_WORKFLOW_ID, WorkflowEventType
+    
+    if COZE_AVAILABLE and not force_reload:
+        return True
+    
+    # Reset state if forcing reload
+    if force_reload:
+        COZE_AVAILABLE = False
+        coze = None
+        COZE_API_TOKEN = None
+        WORKFLOW_ID = None
+        EXPENSE_WORKFLOW_ID = None
+        WorkflowEventType = None
+    
+    try:
+        from cozepy import COZE_CN_BASE_URL, Coze, TokenAuth, Stream, WorkflowEvent, WorkflowEventType
+        
+        # Get Coze API token from environment variable
+        COZE_API_TOKEN = os.getenv("COZE_API_TOKEN")
+        if not COZE_API_TOKEN:
+            return False
+        
+        COZE_API_BASE = COZE_CN_BASE_URL
+        
+        # Workflow ID from Coze platform
+        WORKFLOW_ID = os.getenv("COZE_WORKFLOW_ID")
+        if not WORKFLOW_ID:
+            return False
+        
+        # Expense parsing workflow ID
+        EXPENSE_WORKFLOW_ID = os.getenv("COZE_EXPENSE_WORKFLOW_ID")
+        if not EXPENSE_WORKFLOW_ID:
+            return False
+        
+        # Initialize Coze client
+        coze = Coze(auth=TokenAuth(token=COZE_API_TOKEN), base_url=COZE_API_BASE)
+        WorkflowEventType = WorkflowEventType  # Make it available globally
+        COZE_AVAILABLE = True
+        print("[AI Service] Coze workflow initialized successfully")
+        return True
+    except ImportError as e:
+        print(f"[AI Service] Warning: cozepy package not installed. Please install it with: pip install cozepy")
+        print(f"[AI Service] Original error: {str(e)}")
+        return False
+    except Exception as e:
+        print(f"[AI Service] Warning: Failed to initialize Coze workflow: {str(e)}")
+        print(f"[AI Service] Please configure COZE_API_TOKEN, COZE_WORKFLOW_ID, and COZE_EXPENSE_WORKFLOW_ID in .env file or use the frontend configuration panel")
+        return False
+
+# Try to initialize on import, but don't fail if config is missing
 try:
-    from cozepy import COZE_CN_BASE_URL, Coze, TokenAuth, Stream, WorkflowEvent, WorkflowEventType
-    
-    # Get Coze API token from environment variable (required, no default)
-    COZE_API_TOKEN = os.getenv("COZE_API_TOKEN")
-    if not COZE_API_TOKEN:
-        raise ValueError(
-            "COZE_API_TOKEN environment variable is required but not set. "
-            "Please set it in your .env file or environment variables."
-        )
-    
-    COZE_API_BASE = COZE_CN_BASE_URL
-    
-    # Workflow ID from Coze platform (required, no default)
-    WORKFLOW_ID = os.getenv("COZE_WORKFLOW_ID")
-    if not WORKFLOW_ID:
-        raise ValueError(
-            "COZE_WORKFLOW_ID environment variable is required but not set. "
-            "Please set it in your .env file or environment variables."
-        )
-    
-    # Expense parsing workflow ID (required, no default)
-    EXPENSE_WORKFLOW_ID = os.getenv("COZE_EXPENSE_WORKFLOW_ID")
-    if not EXPENSE_WORKFLOW_ID:
-        raise ValueError(
-            "COZE_EXPENSE_WORKFLOW_ID environment variable is required but not set. "
-            "Please set it in your .env file or environment variables."
-        )
-    
-    # Initialize Coze client
-    coze = Coze(auth=TokenAuth(token=COZE_API_TOKEN), base_url=COZE_API_BASE)
-    COZE_AVAILABLE = True
-    print("[AI Service] Coze workflow initialized successfully")
-except ImportError as e:
-    COZE_AVAILABLE = False
-    coze = None
-    raise RuntimeError(f"cozepy package is required but not installed. Please install it with: pip install cozepy. Original error: {str(e)}")
-except (ValueError, Exception) as e:
-    COZE_AVAILABLE = False
-    coze = None
-    raise RuntimeError(f"Failed to initialize Coze workflow: {str(e)}")
+    _initialize_coze()
+except Exception as e:
+    print(f"[AI Service] Coze initialization skipped (config may be missing): {str(e)}")
 
 
 def generate_trip_with_llm(request_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -84,9 +117,13 @@ def generate_trip_with_llm(request_data: Dict[str, Any]) -> Dict[str, Any]:
     print(f"[Input] Transport: {transport}")
     print(f"[Input] Accommodation: {accommodation}")
     
-    # Force Coze workflow - no fallback
-    if not COZE_AVAILABLE:
-        raise RuntimeError("Coze workflow is not available. Please check Coze configuration.")
+    # Initialize Coze if not already initialized
+    if not _initialize_coze():
+        raise RuntimeError(
+            "Coze workflow is not configured. Please configure COZE_API_TOKEN, COZE_WORKFLOW_ID, and COZE_EXPENSE_WORKFLOW_ID. "
+            "You can use the frontend configuration panel (click the gear icon) to set these values, "
+            "or add them to the .env file in the backend directory. After configuration, restart the backend service."
+        )
     
     result = _generate_with_coze_workflow(request_data)
     
@@ -124,8 +161,13 @@ def parse_expense_from_voice(voice_text: str) -> Dict[str, Any]:
     print("="*60)
     print(f"[Input] Voice text: {voice_text}")
     
-    if not COZE_AVAILABLE:
-        raise RuntimeError("Coze workflow is not available. Please check Coze configuration.")
+    # Initialize Coze if not already initialized
+    if not _initialize_coze():
+        raise RuntimeError(
+            "Coze workflow is not configured. Please configure COZE_API_TOKEN, COZE_WORKFLOW_ID, and COZE_EXPENSE_WORKFLOW_ID. "
+            "You can use the frontend configuration panel (click the gear icon) to set these values, "
+            "or add them to the .env file in the backend directory. After configuration, restart the backend service."
+        )
     
     # Call expense workflow - only accepts user's spoken sentence as input
     
@@ -133,7 +175,8 @@ def parse_expense_from_voice(voice_text: str) -> Dict[str, Any]:
     messages = []
     errors = []
     
-    def handle_workflow_iterator(stream: Stream[WorkflowEvent]):
+    def handle_workflow_iterator(stream):
+        # WorkflowEventType is available globally after _initialize_coze
         for event in stream:
             if event.event == WorkflowEventType.MESSAGE:
                 print("got message", event.message)
@@ -311,7 +354,8 @@ def _generate_with_coze_workflow(request_data: Dict[str, Any]) -> Dict[str, Any]
     messages = []
     errors = []
     
-    def handle_workflow_iterator(stream: Stream[WorkflowEvent]):
+    def handle_workflow_iterator(stream):
+        # WorkflowEventType is available globally after _initialize_coze
         for event in stream:
             if event.event == WorkflowEventType.MESSAGE:
                 print(f"[Coze Workflow] Received message: {event.message}")

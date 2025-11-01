@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import styles from './styles.module.css';
+import { updateConfig } from '../../config';
+import { api } from '../../utils/api';
 
 const HomePage: React.FC = () => {
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
@@ -11,6 +13,30 @@ const HomePage: React.FC = () => {
     userId?: string;
     username?: string;
   }>({});
+  const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  
+  // 前端配置状态
+  const [frontendConfig, setFrontendConfig] = useState({
+    VITE_ASR_SECRET_ID: localStorage.getItem('config_VITE_ASR_SECRET_ID') || '',
+    VITE_ASR_SECRET_KEY: localStorage.getItem('config_VITE_ASR_SECRET_KEY') || '',
+    VITE_ASR_APP_ID: localStorage.getItem('config_VITE_ASR_APP_ID') || '',
+    VITE_AMAP_API_KEY: localStorage.getItem('config_VITE_AMAP_API_KEY') || '',
+    VITE_AMAP_SECURITY_JS_CODE: localStorage.getItem('config_VITE_AMAP_SECURITY_JS_CODE') || '',
+  });
+  
+  // 后端配置状态
+  const [backendConfig, setBackendConfig] = useState({
+    COZE_API_TOKEN: '',
+    COZE_WORKFLOW_ID: '',
+    COZE_EXPENSE_WORKFLOW_ID: '',
+    HOST: '0.0.0.0',
+    PORT: '3000',
+    DEBUG: 'true',
+    ALLOWED_ORIGINS: 'http://localhost:5173,http://localhost:3000',
+  });
+  
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -108,6 +134,38 @@ const HomePage: React.FC = () => {
     window.location.reload();
   };
 
+  const handleSaveFrontendConfig = () => {
+    try {
+      // 保存到 localStorage
+      updateConfig('VITE_ASR_SECRET_ID', frontendConfig.VITE_ASR_SECRET_ID);
+      updateConfig('VITE_ASR_SECRET_KEY', frontendConfig.VITE_ASR_SECRET_KEY);
+      updateConfig('VITE_ASR_APP_ID', frontendConfig.VITE_ASR_APP_ID);
+      updateConfig('VITE_AMAP_API_KEY', frontendConfig.VITE_AMAP_API_KEY);
+      updateConfig('VITE_AMAP_SECURITY_JS_CODE', frontendConfig.VITE_AMAP_SECURITY_JS_CODE);
+      
+      setConfigMessage({ type: 'success', text: '前端配置已保存！页面将自动刷新以应用更改。' });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      setConfigMessage({ type: 'error', text: '保存前端配置失败：' + (error as Error).message });
+    }
+  };
+
+  const handleSaveBackendConfig = async () => {
+    setConfigSaving(true);
+    setConfigMessage(null);
+    
+    try {
+      await api.saveBackendConfig(backendConfig);
+      setConfigMessage({ type: 'success', text: '后端配置已保存！请重启后端服务以使更改生效。' });
+    } catch (error: any) {
+      setConfigMessage({ type: 'error', text: '保存后端配置失败：' + (error.message || '未知错误') });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
   return (
     <div className={styles.pageWrapper}>
       {/* 顶部导航栏 */}
@@ -140,6 +198,15 @@ const HomePage: React.FC = () => {
                 <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-text-secondary"></i>
               </div>
             </div>
+            
+            {/* API配置按钮 */}
+            <button
+              onClick={() => setIsConfigModalOpen(true)}
+              className="px-3 py-2 text-text-secondary hover:text-primary transition-colors rounded-lg hover:bg-gray-50"
+              title="API配置"
+            >
+              <i className="fas fa-cog"></i>
+            </button>
             
             {isLoggedIn ? (
               /* 已登录 - 显示用户信息 */
@@ -488,6 +555,232 @@ const HomePage: React.FC = () => {
           </div>
         </section>
       </main>
+
+      {/* API配置模态框 */}
+      {isConfigModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-text-primary">API 配置</h2>
+              <button
+                onClick={() => {
+                  setIsConfigModalOpen(false);
+                  setConfigMessage(null);
+                }}
+                className="text-text-secondary hover:text-text-primary"
+                title="关闭配置面板"
+                aria-label="关闭配置面板"
+              >
+                <i className="fas fa-times text-xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {configMessage && (
+                <div className={`p-4 rounded-lg ${
+                  configMessage.type === 'success' 
+                    ? 'bg-green-50 text-green-800 border border-green-200' 
+                    : 'bg-red-50 text-red-800 border border-red-200'
+                }`}>
+                  {configMessage.text}
+                </div>
+              )}
+
+              {/* 前端配置 */}
+              <div>
+                <h3 className="text-xl font-semibold text-text-primary mb-4 flex items-center">
+                  <i className="fas fa-desktop mr-2"></i>
+                  前端配置
+                </h3>
+                <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      腾讯云 Secret ID (VITE_ASR_SECRET_ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={frontendConfig.VITE_ASR_SECRET_ID}
+                      onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_ASR_SECRET_ID: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="AKID..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      腾讯云 Secret Key (VITE_ASR_SECRET_KEY)
+                    </label>
+                    <input
+                      type="password"
+                      value={frontendConfig.VITE_ASR_SECRET_KEY}
+                      onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_ASR_SECRET_KEY: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="sb9..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      腾讯云 App ID (VITE_ASR_APP_ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={frontendConfig.VITE_ASR_APP_ID}
+                      onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_ASR_APP_ID: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="1310310414"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      高德地图 API Key (VITE_AMAP_API_KEY)
+                    </label>
+                    <input
+                      type="text"
+                      value={frontendConfig.VITE_AMAP_API_KEY}
+                      onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_AMAP_API_KEY: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="52dd846396088bec9ffbdb6f06760c22"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      高德地图 Security JS Code (VITE_AMAP_SECURITY_JS_CODE)
+                    </label>
+                    <input
+                      type="text"
+                      value={frontendConfig.VITE_AMAP_SECURITY_JS_CODE}
+                      onChange={(e) => setFrontendConfig({ ...frontendConfig, VITE_AMAP_SECURITY_JS_CODE: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="f99450c170e1b26951ad24c3c66840f8"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSaveFrontendConfig}
+                    className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    <i className="fas fa-save mr-2"></i>
+                    保存前端配置
+                  </button>
+                </div>
+              </div>
+
+              {/* 后端配置 */}
+              <div>
+                <h3 className="text-xl font-semibold text-text-primary mb-4 flex items-center">
+                  <i className="fas fa-server mr-2"></i>
+                  后端配置
+                </h3>
+                <div className="space-y-4 bg-gray-50 p-4 rounded-lg">
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      Coze API Token (COZE_API_TOKEN)
+                    </label>
+                    <input
+                      type="password"
+                      value={backendConfig.COZE_API_TOKEN}
+                      onChange={(e) => setBackendConfig({ ...backendConfig, COZE_API_TOKEN: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="pat_kHM3rm8CbTqUuDk5JoSGVErqFGkiP0Q5uq2qW0qpr4zVER79upO0lLgLNIdiTlGN"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      Coze Workflow ID (COZE_WORKFLOW_ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={backendConfig.COZE_WORKFLOW_ID}
+                      onChange={(e) => setBackendConfig({ ...backendConfig, COZE_WORKFLOW_ID: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="7566908212949270528"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      Coze Expense Workflow ID (COZE_EXPENSE_WORKFLOW_ID)
+                    </label>
+                    <input
+                      type="text"
+                      value={backendConfig.COZE_EXPENSE_WORKFLOW_ID}
+                      onChange={(e) => setBackendConfig({ ...backendConfig, COZE_EXPENSE_WORKFLOW_ID: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="7567323652867375167"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-1">
+                        Host (HOST)
+                      </label>
+                      <input
+                        type="text"
+                        value={backendConfig.HOST}
+                        onChange={(e) => setBackendConfig({ ...backendConfig, HOST: e.target.value })}
+                        className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        placeholder="0.0.0.0"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-text-primary mb-1">
+                        Port (PORT)
+                      </label>
+                      <input
+                        type="text"
+                        value={backendConfig.PORT}
+                        onChange={(e) => setBackendConfig({ ...backendConfig, PORT: e.target.value })}
+                        className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                        placeholder="3000"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      Debug (DEBUG)
+                    </label>
+                    <select
+                      value={backendConfig.DEBUG}
+                      onChange={(e) => setBackendConfig({ ...backendConfig, DEBUG: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      aria-label="Debug mode selection"
+                    >
+                      <option value="true">True</option>
+                      <option value="false">False</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1">
+                      Allowed Origins (ALLOWED_ORIGINS)
+                    </label>
+                    <input
+                      type="text"
+                      value={backendConfig.ALLOWED_ORIGINS}
+                      onChange={(e) => setBackendConfig({ ...backendConfig, ALLOWED_ORIGINS: e.target.value })}
+                      className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                      placeholder="http://localhost:5173,http://localhost:3000"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSaveBackendConfig}
+                    disabled={configSaving}
+                    className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {configSaving ? (
+                      <>
+                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                        保存中...
+                      </>
+                    ) : (
+                      <>
+                        <i className="fas fa-save mr-2"></i>
+                        保存后端配置
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

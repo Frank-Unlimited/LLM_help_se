@@ -15,20 +15,49 @@ declare global {
   }
 }
 
-// 从环境变量读取配置并设置到 window.config
-// 优先使用环境变量，如果没有则使用默认值（开发环境提示）
+// 从 localStorage 或环境变量读取配置并设置到 window.config
+// 优先级：localStorage > 环境变量 > 默认值
 const initConfig = () => {
+  // 从 localStorage 读取配置
+  const getStorageConfig = (key: string, envKey?: string) => {
+    const storageKey = `config_${key}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) return stored;
+    
+    // 回退到环境变量
+    if (envKey) {
+      return import.meta.env[envKey] || '';
+    }
+    return '';
+  };
+
+  const getStorageNumberConfig = (key: string, envKey?: string) => {
+    const storageKey = `config_${key}`;
+    const stored = localStorage.getItem(storageKey);
+    if (stored) {
+      const num = Number(stored);
+      return isNaN(num) ? undefined : num;
+    }
+    
+    // 回退到环境变量
+    if (envKey) {
+      const envValue = import.meta.env[envKey];
+      return envValue ? Number(envValue) : undefined;
+    }
+    return undefined;
+  };
+
   window.config = {
     // 腾讯云API配置（支持 VITE_ASR_* 和 VITE_TENCENT_* 两种命名）
-    secretId: import.meta.env.VITE_ASR_SECRET_ID || import.meta.env.VITE_TENCENT_SECRET_ID || '',
-    secretKey: import.meta.env.VITE_ASR_SECRET_KEY || import.meta.env.VITE_TENCENT_SECRET_KEY || '',
-    appId: (import.meta.env.VITE_ASR_APP_ID || import.meta.env.VITE_TENCENT_APP_ID)
-      ? Number(import.meta.env.VITE_ASR_APP_ID || import.meta.env.VITE_TENCENT_APP_ID)
-      : undefined,
+    secretId: getStorageConfig('VITE_ASR_SECRET_ID') || import.meta.env.VITE_ASR_SECRET_ID || import.meta.env.VITE_TENCENT_SECRET_ID || '',
+    secretKey: getStorageConfig('VITE_ASR_SECRET_KEY') || import.meta.env.VITE_ASR_SECRET_KEY || import.meta.env.VITE_TENCENT_SECRET_KEY || '',
+    appId: getStorageNumberConfig('VITE_ASR_APP_ID') || 
+      (import.meta.env.VITE_ASR_APP_ID ? Number(import.meta.env.VITE_ASR_APP_ID) : undefined) ||
+      (import.meta.env.VITE_TENCENT_APP_ID ? Number(import.meta.env.VITE_TENCENT_APP_ID) : undefined),
     
     // 高德地图API配置
-    amapApiKey: import.meta.env.VITE_AMAP_API_KEY || '',
-    amapSecurityJsCode: import.meta.env.VITE_AMAP_SECURITY_JS_CODE || '',
+    amapApiKey: getStorageConfig('VITE_AMAP_API_KEY') || import.meta.env.VITE_AMAP_API_KEY || '',
+    amapSecurityJsCode: getStorageConfig('VITE_AMAP_SECURITY_JS_CODE') || import.meta.env.VITE_AMAP_SECURITY_JS_CODE || '',
   };
 
   // 开发环境下检查配置完整性
@@ -49,6 +78,23 @@ const initConfig = () => {
 
 // 立即执行初始化
 initConfig();
+
+// 导出配置更新函数，供外部调用
+export const updateConfig = (key: string, value: string | number) => {
+  const storageKey = `config_${key}`;
+  if (value === undefined || value === null || value === '') {
+    localStorage.removeItem(storageKey);
+  } else {
+    localStorage.setItem(storageKey, String(value));
+  }
+  // 重新初始化配置
+  initConfig();
+};
+
+// 导出获取配置函数
+export const getConfig = (key: string): string | number | undefined => {
+  return window.config?.[key as keyof typeof window.config];
+};
 
 export {};
 

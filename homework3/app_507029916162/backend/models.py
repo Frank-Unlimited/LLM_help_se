@@ -232,3 +232,21 @@ class ChangePasswordRequest(BaseModel):
     currentPassword: str
     newPassword: str
 
+
+# ============ Configuration Models ============
+
+class BackendConfigRequest(BaseModel):
+    """Backend environment configuration request"""
+    COZE_API_TOKEN: Optional[str] = None
+    COZE_WORKFLOW_ID: Optional[str] = None
+    COZE_EXPENSE_WORKFLOW_ID: Optional[str] = None
+    HOST: Optional[str] = None
+    PORT: Optional[str] = None
+    DEBUG: Optional[str] = None
+    ALLOWED_ORIGINS: Optional[str] = None
+
+
+class ConfigResponse(BaseModel):
+    """Configuration response"""
+    success: bool = True
+    message: str = "Configuration saved successfully"

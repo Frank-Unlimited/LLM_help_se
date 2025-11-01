@@ -361,5 +361,23 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // ============ Configuration APIs ============
+
+  // 保存后端环境变量配置
+  saveBackendConfig: async (config: {
+    COZE_API_TOKEN?: string;
+    COZE_WORKFLOW_ID?: string;
+    COZE_EXPENSE_WORKFLOW_ID?: string;
+    HOST?: string;
+    PORT?: string;
+    DEBUG?: string;
+    ALLOWED_ORIGINS?: string;
+  }): Promise<{ success: boolean; message: string }> => {
+    return fetchAPI('/config/backend-env', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+  },
 };
 

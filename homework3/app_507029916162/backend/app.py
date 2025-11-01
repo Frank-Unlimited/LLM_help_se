@@ -37,7 +37,8 @@ from models import (
     BudgetInfo, Expense,
     LoginRequest, RegisterRequest, SendVerifyCodeRequest,
     ForgotPasswordRequest, AuthResponse, VerifyCodeResponse,
-    UserProfileResponse, UpdateUserProfileRequest, ChangePasswordRequest
+    UserProfileResponse, UpdateUserProfileRequest, ChangePasswordRequest,
+    BackendConfigRequest, ConfigResponse
 )
 from database import get_db
 from ai_service import generate_trip_with_llm, parse_expense_from_voice
@@ -1011,6 +1012,95 @@ async def change_password(
         "success": True,
         "message": "Password changed successfully"
     }
+
+
+# ============ Configuration APIs ============
+
+@app.post("/api/config/backend-env", response_model=ConfigResponse)
+async def save_backend_config(config: BackendConfigRequest):
+    """Save backend environment variables to .env file"""
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    env_path = os.path.join(backend_dir, '.env')
+    
+    try:
+        # Read existing .env file if it exists
+        existing_vars = {}
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        existing_vars[key.strip()] = value.strip()
+        
+        # Update with new values
+        config_dict = config.dict(exclude_none=True)
+        for key, value in config_dict.items():
+            existing_vars[key] = value
+        
+        # Write back to .env file
+        with open(env_path, 'w', encoding='utf-8') as f:
+            # Write header comment
+            f.write("# 环境变量配置\n")
+            f.write("# 此文件由系统自动生成，请谨慎修改\n\n")
+            
+            # Write Coze API配置
+            f.write("# Coze API配置（必需）\n")
+            f.write(f"# 从 https://www.coze.cn/open/oauth/pats 获取\n")
+            if 'COZE_API_TOKEN' in existing_vars:
+                f.write(f"COZE_API_TOKEN={existing_vars['COZE_API_TOKEN']}\n")
+            f.write(f"# Coze Workflow ID（必需）\n")
+            f.write(f"# 从 Coze 平台获取你的 Workflow ID\n")
+            if 'COZE_WORKFLOW_ID' in existing_vars:
+                f.write(f"COZE_WORKFLOW_ID={existing_vars['COZE_WORKFLOW_ID']}\n")
+            if 'COZE_EXPENSE_WORKFLOW_ID' in existing_vars:
+                f.write(f"COZE_EXPENSE_WORKFLOW_ID={existing_vars['COZE_EXPENSE_WORKFLOW_ID']}\n")
+            f.write("\n")
+            
+            # Write service config
+            f.write("# 服务配置（可选）\n")
+            if 'HOST' in existing_vars:
+                f.write(f"HOST={existing_vars['HOST']}\n")
+            if 'PORT' in existing_vars:
+                f.write(f"PORT={existing_vars['PORT']}\n")
+            if 'DEBUG' in existing_vars:
+                f.write(f"DEBUG={existing_vars['DEBUG']}\n")
+            f.write("\n")
+            
+            # Write CORS config
+            f.write("# CORS配置（可选）\n")
+            if 'ALLOWED_ORIGINS' in existing_vars:
+                f.write(f"ALLOWED_ORIGINS={existing_vars['ALLOWED_ORIGINS']}\n")
+        
+        # Reload environment variables
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(env_path, override=True)
+            print(f"[Config] Environment variables reloaded from {env_path}")
+            
+            # Re-initialize Coze if it's already imported
+            try:
+                from ai_service import _initialize_coze
+                print("[Config] Attempting to re-initialize Coze workflow...")
+                _initialize_coze(force_reload=True)
+            except Exception as e:
+                print(f"[Config] Warning: Could not re-initialize Coze: {str(e)}")
+                print("[Config] Please restart the backend service for Coze configuration to take effect.")
+        except ImportError:
+            pass
+        
+        return ConfigResponse(
+            success=True,
+            message="Backend configuration saved successfully. Please restart the backend service for changes to take effect."
+        )
+    except Exception as e:
+        print(f"[Config ERROR] Failed to save backend config: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save backend configuration: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
