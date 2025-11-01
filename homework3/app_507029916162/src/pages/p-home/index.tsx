@@ -16,6 +16,8 @@ const HomePage: React.FC = () => {
   const [isConfigModalOpen, setIsConfigModalOpen] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configMessage, setConfigMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [bulkInputText, setBulkInputText] = useState('');
+  const [parseMessage, setParseMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
   // 前端配置状态
   const [frontendConfig, setFrontendConfig] = useState({
@@ -134,35 +136,145 @@ const HomePage: React.FC = () => {
     window.location.reload();
   };
 
-  const handleSaveFrontendConfig = () => {
+  // 一键保存所有配置（前端+后端）
+  const handleSaveAllConfig = async () => {
+    setConfigSaving(true);
+    setConfigMessage(null);
+    
     try {
-      // 保存到 localStorage
+      // 先保存前端配置到 localStorage
       updateConfig('VITE_ASR_SECRET_ID', frontendConfig.VITE_ASR_SECRET_ID);
       updateConfig('VITE_ASR_SECRET_KEY', frontendConfig.VITE_ASR_SECRET_KEY);
       updateConfig('VITE_ASR_APP_ID', frontendConfig.VITE_ASR_APP_ID);
       updateConfig('VITE_AMAP_API_KEY', frontendConfig.VITE_AMAP_API_KEY);
       updateConfig('VITE_AMAP_SECURITY_JS_CODE', frontendConfig.VITE_AMAP_SECURITY_JS_CODE);
       
-      setConfigMessage({ type: 'success', text: '前端配置已保存！页面将自动刷新以应用更改。' });
+      // 保存后端配置到服务器
+      await api.saveBackendConfig(backendConfig);
+      
+      setConfigMessage({ 
+        type: 'success', 
+        text: '所有配置已保存成功！前端配置将立即生效（页面将自动刷新），后端配置需要重启后端服务后生效。' 
+      });
+      
+      // 延迟刷新页面以应用前端配置
       setTimeout(() => {
         window.location.reload();
-      }, 1500);
-    } catch (error) {
-      setConfigMessage({ type: 'error', text: '保存前端配置失败：' + (error as Error).message });
+      }, 2000);
+    } catch (error: any) {
+      setConfigMessage({ 
+        type: 'error', 
+        text: '保存配置失败：' + (error.message || '未知错误') 
+      });
+    } finally {
+      setConfigSaving(false);
     }
   };
 
-  const handleSaveBackendConfig = async () => {
-    setConfigSaving(true);
-    setConfigMessage(null);
+  // 解析批量输入的环境变量格式文本
+  const handleParseBulkInput = () => {
+    setParseMessage(null);
     
-    try {
-      await api.saveBackendConfig(backendConfig);
-      setConfigMessage({ type: 'success', text: '后端配置已保存！请重启后端服务以使更改生效。' });
-    } catch (error: any) {
-      setConfigMessage({ type: 'error', text: '保存后端配置失败：' + (error.message || '未知错误') });
-    } finally {
-      setConfigSaving(false);
+    if (!bulkInputText.trim()) {
+      setParseMessage({ type: 'error', text: '请输入配置文本' });
+      return;
+    }
+
+    const lines = bulkInputText.split('\n');
+    const parsedFrontend: any = {};
+    const parsedBackend: any = {};
+    let parsedCount = 0;
+    let errorCount = 0;
+
+    // 前端配置键名映射
+    const frontendKeys = {
+      'VITE_ASR_SECRET_ID': 'VITE_ASR_SECRET_ID',
+      'VITE_ASR_SECRET_KEY': 'VITE_ASR_SECRET_KEY',
+      'VITE_ASR_APP_ID': 'VITE_ASR_APP_ID',
+      'VITE_AMAP_API_KEY': 'VITE_AMAP_API_KEY',
+      'VITE_AMAP_SECURITY_JS_CODE': 'VITE_AMAP_SECURITY_JS_CODE',
+    };
+
+    // 后端配置键名映射
+    const backendKeys = {
+      'COZE_API_TOKEN': 'COZE_API_TOKEN',
+      'COZE_WORKFLOW_ID': 'COZE_WORKFLOW_ID',
+      'COZE_EXPENSE_WORKFLOW_ID': 'COZE_EXPENSE_WORKFLOW_ID',
+      'HOST': 'HOST',
+      'PORT': 'PORT',
+      'DEBUG': 'DEBUG',
+      'ALLOWED_ORIGINS': 'ALLOWED_ORIGINS',
+    };
+
+    for (const line of lines) {
+      const trimmedLine = line.trim();
+      
+      // 跳过空行和注释行
+      if (!trimmedLine || trimmedLine.startsWith('#') || trimmedLine.startsWith('//')) {
+        continue;
+      }
+
+      // 解析 KEY=VALUE 格式（支持值中包含等号的情况）
+      const equalIndex = trimmedLine.indexOf('=');
+      if (equalIndex === -1) {
+        errorCount++;
+        continue;
+      }
+
+      const key = trimmedLine.substring(0, equalIndex).trim();
+      let value = trimmedLine.substring(equalIndex + 1).trim();
+      
+      // 移除值两边的引号（如果有）
+      if ((value.startsWith('"') && value.endsWith('"')) || 
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+
+      // 验证 key 格式
+      if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+        errorCount++;
+        continue;
+      }
+
+      // 判断是前端还是后端配置
+      if (frontendKeys[key as keyof typeof frontendKeys]) {
+        parsedFrontend[key] = value;
+        parsedCount++;
+      } else if (backendKeys[key as keyof typeof backendKeys]) {
+        parsedBackend[key] = value;
+        parsedCount++;
+      } else {
+        errorCount++;
+      }
+    }
+
+    // 更新配置状态
+    if (Object.keys(parsedFrontend).length > 0) {
+      setFrontendConfig(prev => ({ ...prev, ...parsedFrontend }));
+    }
+    if (Object.keys(parsedBackend).length > 0) {
+      setBackendConfig(prev => ({ ...prev, ...parsedBackend }));
+    }
+
+    // 显示解析结果
+    if (parsedCount > 0) {
+      const frontendCount = Object.keys(parsedFrontend).length;
+      const backendCount = Object.keys(parsedBackend).length;
+      let message = `成功解析 ${parsedCount} 个配置项：`;
+      if (frontendCount > 0) {
+        message += `前端 ${frontendCount} 个`;
+      }
+      if (backendCount > 0) {
+        if (frontendCount > 0) message += '，';
+        message += `后端 ${backendCount} 个`;
+      }
+      if (errorCount > 0) {
+        message += `。有 ${errorCount} 行无法识别`;
+      }
+      setParseMessage({ type: 'success', text: message });
+      setBulkInputText(''); // 清空输入框
+    } else {
+      setParseMessage({ type: 'error', text: '未能解析任何配置项，请检查格式是否为 KEY=VALUE' });
     }
   };
 
@@ -566,6 +678,8 @@ const HomePage: React.FC = () => {
                 onClick={() => {
                   setIsConfigModalOpen(false);
                   setConfigMessage(null);
+                  setParseMessage(null);
+                  setBulkInputText('');
                 }}
                 className="text-text-secondary hover:text-text-primary"
                 title="关闭配置面板"
@@ -585,6 +699,40 @@ const HomePage: React.FC = () => {
                   {configMessage.text}
                 </div>
               )}
+
+              {/* 批量输入解析 */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-text-primary mb-3 flex items-center">
+                  <i className="fas fa-magic mr-2 text-blue-600"></i>
+                  批量导入配置
+                </h3>
+                <p className="text-sm text-text-secondary mb-3">
+                  粘贴环境变量格式的配置文本，系统将自动识别并填充到对应字段（支持 KEY=VALUE 格式）
+                </p>
+                <textarea
+                  value={bulkInputText}
+                  onChange={(e) => setBulkInputText(e.target.value)}
+                  placeholder={`粘贴配置文本，格式：KEY=VALUE\n\n示例格式：\nVITE_ASR_SECRET_ID=你的值\nVITE_ASR_SECRET_KEY=你的值\nCOZE_API_TOKEN=你的值\nCOZE_WORKFLOW_ID=你的值`}
+                  className="w-full px-4 py-2 border border-border-light rounded-lg focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                  rows={10}
+                />
+                {parseMessage && (
+                  <div className={`mt-2 p-2 rounded text-sm ${
+                    parseMessage.type === 'success' 
+                      ? 'bg-green-100 text-green-700' 
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    {parseMessage.text}
+                  </div>
+                )}
+                <button
+                  onClick={handleParseBulkInput}
+                  className="mt-3 w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  <i className="fas fa-wand-magic-sparkles mr-2"></i>
+                  自动解析并填充
+                </button>
+              </div>
 
               {/* 前端配置 */}
               <div>
@@ -653,13 +801,6 @@ const HomePage: React.FC = () => {
                       placeholder="请输入高德地图 Security JS Code"
                     />
                   </div>
-                  <button
-                    onClick={handleSaveFrontendConfig}
-                    className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors"
-                  >
-                    <i className="fas fa-save mr-2"></i>
-                    保存前端配置
-                  </button>
                 </div>
               </div>
 
@@ -758,24 +899,31 @@ const HomePage: React.FC = () => {
                       placeholder="http://localhost:5173,http://localhost:3000"
                     />
                   </div>
-                  <button
-                    onClick={handleSaveBackendConfig}
-                    disabled={configSaving}
-                    className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {configSaving ? (
-                      <>
-                        <i className="fas fa-spinner fa-spin mr-2"></i>
-                        保存中...
-                      </>
-                    ) : (
-                      <>
-                        <i className="fas fa-save mr-2"></i>
-                        保存后端配置
-                      </>
-                    )}
-                  </button>
                 </div>
+              </div>
+
+              {/* 统一保存按钮 */}
+              <div className="pt-4 border-t">
+                <button
+                  onClick={handleSaveAllConfig}
+                  disabled={configSaving}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-lg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-lg shadow-lg"
+                >
+                  {configSaving ? (
+                    <>
+                      <i className="fas fa-spinner fa-spin mr-2"></i>
+                      正在保存所有配置...
+                    </>
+                  ) : (
+                    <>
+                      <i className="fas fa-save mr-2"></i>
+                      一键保存所有配置
+                    </>
+                  )}
+                </button>
+                <p className="mt-2 text-xs text-text-secondary text-center">
+                  将同时保存前端配置（localStorage）和后端配置（.env文件）
+                </p>
               </div>
             </div>
           </div>
