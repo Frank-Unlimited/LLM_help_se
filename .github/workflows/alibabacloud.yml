@@ -7,14 +7,14 @@ on:
       - master
     paths:
       - 'homework3/app_507029916162/**'
-      - '.github/workflows/docker-build-push.yml'
+      - '.github/workflows/alibabacloud.yml'
   pull_request:
     branches:
       - main
       - master
     paths:
       - 'homework3/app_507029916162/**'
-      - '.github/workflows/docker-build-push.yml'
+      - '.github/workflows/alibabacloud.yml'
   workflow_dispatch: # 允许手动触发
 
 env:
