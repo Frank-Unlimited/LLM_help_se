@@ -1,12 +1,12 @@
 # 多阶段构建Dockerfile
 # 阶段1: 构建前端
-FROM node:18-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
 # 设置非交互式环境变量以避免构建过程中的交互提示
 ENV CI=true
-ENV NODE_ENV=production
+# 注意：不要设置 NODE_ENV=production，因为我们需要安装 devDependencies 进行构建
 
 # 复制前端依赖文件
 COPY package*.json ./
@@ -16,8 +16,8 @@ COPY postcss.config.js ./
 COPY tailwind.config.js ./
 COPY eslint.config.js ./
 
-# 安装前端依赖
-RUN npm ci --prefer-offline --no-audit
+# 安装前端依赖（包括 devDependencies，构建需要）
+RUN npm install --legacy-peer-deps
 
 # 复制前端源代码
 COPY src ./src
@@ -25,7 +25,8 @@ COPY index.html ./
 
 # 构建前端（跳过 TypeScript 类型检查，仅进行构建）
 # Vite 会处理 TypeScript 转译，所以不需要先运行 tsc
-RUN npm run build:docker
+# 使用 npx 确保能找到 vite 命令（vite 在 devDependencies 中）
+RUN npx vite build
 
 # 阶段2: Python后端运行环境
 FROM python:3.10-slim
