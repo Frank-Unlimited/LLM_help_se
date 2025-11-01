@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tuzhixing-app
+    ports:
+      - "8080:80"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # 可选：挂载.env文件（如果需要）
+      # - ./backend/.env:/app/backend/.env:ro
+      # 可选：挂载数据库文件（如果需要持久化）
+      - ./backend/travel_planner.db:/app/backend/travel_planner.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+
+
