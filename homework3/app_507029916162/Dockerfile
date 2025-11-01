@@ -22,6 +22,8 @@ RUN npm install --legacy-peer-deps
 # 复制前端源代码
 COPY src ./src
 COPY index.html ./
+# 复制 app 目录（包含语音识别相关文件）
+COPY app ./app
 
 # 构建前端（跳过 TypeScript 类型检查，仅进行构建）
 # Vite 会处理 TypeScript 转译，所以不需要先运行 tsc
