@@ -37,17 +37,25 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# 设置编码环境变量，确保正确处理文件
+ENV PYTHONIOENCODING=utf-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+
 # 安装系统依赖
 RUN apt-get update && apt-get install -y \
     nginx \
     supervisor \
-    && rm -rf /var/lib/apt/lists/*
+    locales \
+    && rm -rf /var/lib/apt/lists/* \
+    && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
 
 # 复制后端依赖文件
 COPY backend/requirements.txt ./backend/
 
 # 安装Python依赖
-RUN pip install --no-cache-dir -r backend/requirements.txt && \
+# 使用 PYTHONIOENCODING 确保正确处理 requirements.txt
+RUN PYTHONIOENCODING=utf-8 pip install --no-cache-dir -r backend/requirements.txt && \
     pip install --no-cache-dir python-dotenv
 
 # 复制后端代码
