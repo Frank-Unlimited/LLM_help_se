@@ -50,7 +50,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 RUN apk add --no-cache \
     nginx \
     supervisor \
-    && rm -rf /var/cache/apk/*
+    && rm -rf /var/cache/apk/* \
+    && mkdir -p /etc/supervisor/conf.d \
+    && mkdir -p /var/log/supervisor
 
 # 复制后端依赖文件
 COPY backend/requirements.txt ./backend/
