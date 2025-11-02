@@ -1,5 +1,13 @@
 # 途智行 - 智能旅行规划平台
 
+# Gitub仓库地址：
+
+[LLM_help_se/homework3 at main · Frank-Unlimited/LLM_help_se](https://github.com/Frank-Unlimited/LLM_help_se/tree/main/homework3)
+
+
+
+
+
 ## 📦 Docker 镜像部署指南
 
 本指南将帮助助教快速部署并测试项目。
