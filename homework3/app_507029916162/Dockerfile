@@ -33,7 +33,8 @@ COPY examples ./examples
 RUN npx vite build
 
 # 阶段2: Python后端运行环境
-FROM python:3.10-slim
+# 使用 alpine 版本以减少镜像大小和内存占用（适合低内存服务器）
+FROM python:3.10-alpine
 
 WORKDIR /app
 
@@ -41,14 +42,15 @@ WORKDIR /app
 ENV PYTHONIOENCODING=utf-8
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
+# 优化 Python 内存使用
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
+# 安装最小系统依赖（alpine 使用 apk，比 apt 更轻量）
+RUN apk add --no-cache \
     nginx \
     supervisor \
-    locales \
-    && rm -rf /var/lib/apt/lists/* \
-    && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8
+    && rm -rf /var/cache/apk/*
 
 # 复制后端依赖文件
 COPY backend/requirements.txt ./backend/
@@ -65,61 +67,15 @@ COPY backend ./backend
 # 从构建阶段复制前端构建产物
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# 创建nginx配置
-RUN echo 'server { \
-    listen 80; \
-    server_name _; \
-    root /app/frontend/dist; \
-    index index.html; \
-    \
-    # 前端路由支持 \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    \
-    # API代理到后端 \
-    location /api { \
-        proxy_pass http://127.0.0.1:3000; \
-        proxy_http_version 1.1; \
-        proxy_set_header Upgrade $http_upgrade; \
-        proxy_set_header Connection "upgrade"; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-        proxy_set_header X-Forwarded-Proto $scheme; \
-    } \
-    \
-    # API文档 \
-    location /docs { \
-        proxy_pass http://127.0.0.1:3000; \
-        proxy_http_version 1.1; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-    } \
-    \
-    location /redoc { \
-        proxy_pass http://127.0.0.1:3000; \
-        proxy_http_version 1.1; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-    } \
-    \
-    location /openapi.json { \
-        proxy_pass http://127.0.0.1:3000; \
-        proxy_http_version 1.1; \
-        proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; \
-    } \
-}' > /etc/nginx/sites-available/default
+# 创建nginx配置（alpine 版本使用 /etc/nginx/nginx.conf）
+RUN printf 'events {\n    worker_connections 512;\n}\nhttp {\n    include /etc/nginx/mime.types;\n    default_type application/octet-stream;\n    sendfile on;\n    keepalive_timeout 65;\n    gzip on;\n    gzip_types text/plain text/css application/json application/javascript;\n    server {\n        listen 80;\n        server_name _;\n        root /app/frontend/dist;\n        index index.html;\n        location / {\n            try_files $uri $uri/ /index.html;\n        }\n        location /api {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Upgrade $http_upgrade;\n            proxy_set_header Connection "upgrade";\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n            proxy_set_header X-Forwarded-Proto $scheme;\n        }\n        location /docs {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /redoc {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /openapi.json {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n    }\n}\n' > /etc/nginx/nginx.conf
 
 # 创建supervisor配置（使用 printf 确保正确的换行符）
-RUN printf '[supervisord]\nnodaemon=true\nlogfile=/var/log/supervisor/supervisord.log\npidfile=/var/run/supervisord.pid\n\n[program:backend]\ncommand=uvicorn app:app --host 0.0.0.0 --port 3000 --workers 2\ndirectory=/app/backend\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/backend.err.log\nstdout_logfile=/var/log/supervisor/backend.out.log\nenvironment=PYTHONUNBUFFERED=1\n\n[program:nginx]\ncommand=nginx -g "daemon off;"\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/nginx.err.log\nstdout_logfile=/var/log/supervisor/nginx.out.log\n' > /etc/supervisor/conf.d/supervisord.conf
+# 优化：单 worker + 连接限制 + 超时设置，减少内存占用
+RUN printf '[supervisord]\nnodaemon=true\nlogfile=/var/log/supervisor/supervisord.log\npidfile=/var/run/supervisord.pid\n\n[program:backend]\ncommand=uvicorn app:app --host 0.0.0.0 --port 3000 --workers 1 --limit-concurrency 20 --timeout-keep-alive 30\ndirectory=/app/backend\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/backend.err.log\nstdout_logfile=/var/log/supervisor/backend.out.log\nenvironment=PYTHONUNBUFFERED=1\nstopasgroup=true\nkillasgroup=true\n\n[program:nginx]\ncommand=nginx -g "daemon off; worker_processes 1;"\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/nginx.err.log\nstdout_logfile=/var/log/supervisor/nginx.out.log\nstopasgroup=true\nkillasgroup=true\n' > /etc/supervisor/conf.d/supervisord.conf
 
-# 创建启动脚本（使用 printf 确保正确的换行符）
-RUN printf '#!/bin/bash\nset -e\n\necho "Starting services..."\n\nexec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /app/start.sh && \
+# 创建启动脚本（使用 printf 确保正确的换行符，alpine 使用 /bin/sh）
+RUN printf '#!/bin/sh\nset -e\necho "Starting services (low memory optimized)..."\nexec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /app/start.sh && \
     chmod +x /app/start.sh
 
 # 暴露端口

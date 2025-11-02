@@ -1,0 +1,78 @@
+# 低内存优化版 Dockerfile（适用于 409MB 内存服务器）
+# 阶段1: 构建前端
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# 设置非交互式环境变量
+ENV CI=true
+
+# 复制前端依赖文件
+COPY package*.json ./
+COPY vite.config.ts ./
+COPY tsconfig*.json ./
+COPY postcss.config.js ./
+COPY tailwind.config.js ./
+COPY eslint.config.js ./
+
+# 安装前端依赖
+RUN npm install --legacy-peer-deps
+
+# 复制前端源代码
+COPY src ./src
+COPY index.html ./
+COPY app ./app
+COPY examples ./examples
+
+# 构建前端
+RUN npx vite build
+
+# 阶段2: Python后端运行环境（使用 alpine 版本以减小镜像大小）
+FROM python:3.10-alpine
+
+WORKDIR /app
+
+# 设置编码环境变量
+ENV PYTHONIOENCODING=utf-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+# 优化 Python 内存使用
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# 安装最小系统依赖（alpine 使用 apk）
+RUN apk add --no-cache \
+    nginx \
+    supervisor \
+    && rm -rf /var/cache/apk/*
+
+# 复制后端依赖文件
+COPY backend/requirements.txt ./backend/
+
+# 安装Python依赖（不缓存，减少空间）
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r backend/requirements.txt && \
+    pip install --no-cache-dir python-dotenv
+
+# 复制后端代码
+COPY backend ./backend
+
+# 从构建阶段复制前端构建产物
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+
+# 创建nginx配置（优化内存使用）
+RUN printf 'user nginx;\nworker_processes 1;\nworker_rlimit_nofile 2048;\nerror_log /var/log/nginx/error.log warn;\npid /var/run/nginx.pid;\nevents {\n    worker_connections 512;\n    use epoll;\n}\nhttp {\n    include /etc/nginx/mime.types;\n    default_type application/octet-stream;\n    log_format main "$remote_addr - $remote_user [$time_local] "$request" "$status $body_bytes_sent "$http_referer" "$http_user_agent" "$http_x_forwarded_for";\n    access_log /var/log/nginx/access.log main;\n    sendfile on;\n    tcp_nopush on;\n    tcp_nodelay on;\n    keepalive_timeout 65;\n    types_hash_max_size 2048;\n    client_max_body_size 10M;\n    gzip on;\n    gzip_vary on;\n    gzip_min_length 1024;\n    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;\n    server {\n        listen 80;\n        server_name _;\n        root /app/frontend/dist;\n        index index.html;\n        location / {\n            try_files $uri $uri/ /index.html;\n        }\n        location /api {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Upgrade $http_upgrade;\n            proxy_set_header Connection "upgrade";\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n            proxy_set_header X-Forwarded-Proto $scheme;\n        }\n        location /docs {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /redoc {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /openapi.json {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n    }\n}\n' > /etc/nginx/nginx.conf
+
+# 创建supervisor配置（单 worker，减少内存使用）
+RUN printf '[supervisord]\nnodaemon=true\nlogfile=/var/log/supervisor/supervisord.log\npidfile=/var/run/supervisord.pid\n\n[program:backend]\ncommand=uvicorn app:app --host 0.0.0.0 --port 3000 --workers 1 --limit-concurrency 10 --timeout-keep-alive 30\ndirectory=/app/backend\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/backend.err.log\nstdout_logfile=/var/log/supervisor/backend.out.log\nenvironment=PYTHONUNBUFFERED=1\nstopasgroup=true\nkillasgroup=true\n\n[program:nginx]\ncommand=nginx -g "daemon off;"\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/nginx.err.log\nstdout_logfile=/var/log/supervisor/nginx.out.log\nstopasgroup=true\nkillasgroup=true\n' > /etc/supervisor/conf.d/supervisord.conf
+
+# 创建启动脚本
+RUN printf '#!/bin/sh\nset -e\necho "Starting services (low memory mode)..."\nexec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /app/start.sh && \
+    chmod +x /app/start.sh
+
+# 暴露端口
+EXPOSE 80
+
+# 启动服务
+CMD ["/app/start.sh"]
+
