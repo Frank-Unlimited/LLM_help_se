@@ -78,7 +78,7 @@ docker stats tuzhixing-app
 
 ### 1. 打开配置管理窗口
 
-1. 在浏览器中访问应用首页（`http://localhost` 或 `http://your-server-ip`）
+1. 在浏览器中访问应用首页（`http://localhost:6666` 或 `http://your-server-ip:6666`）
 2. 点击页面右上角的 **"API 配置"** 按钮（齿轮图标）
 
 ### 2. 填写配置信息
@@ -179,7 +179,7 @@ sleep 15
 # 4. 查看日志确认启动成功
 docker logs tuzhixing-app
 
-# 5. 在浏览器访问 http://localhost
+# 5. 在浏览器访问 http://localhost:6666
 # 6. 点击右上角 "API 配置" 按钮
 # 7. 填写所有 API Keys
 # 8. 点击 "一键保存所有配置"
@@ -201,7 +201,7 @@ docker restart tuzhixing-app
 **检查步骤**：
 1. 确认容器正在运行：`docker ps | grep tuzhixing-app`
 2. 确认端口映射正确：`docker port tuzhixing-app`
-3. 检查防火墙设置（服务器需开放 80 端口）
+3. 检查防火墙设置（服务器需开放 6666 端口）
 4. 查看容器日志：`docker logs tuzhixing-app`
 
 ### Q2: 语音输入功能无法使用

@@ -70,7 +70,7 @@ docker ps
 docker logs tuzhixing-app
 
 # 测试健康检查
-curl http://localhost/api/health
+curl http://localhost:6666/api/health
 ```
 
 ### 6. 配置安全组（阿里云 ECS）
@@ -273,7 +273,7 @@ docker exec -it tuzhixing-app /bin/bash
        ssl_ciphers HIGH:!aNULL:!MD5;
    
        location / {
-           proxy_pass http://127.0.0.1:80;
+           proxy_pass http://127.0.0.1:6666;
            proxy_set_header Host $host;
            proxy_set_header X-Real-IP $remote_addr;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -301,7 +301,7 @@ netstat -tlnp | grep 80
 ss -tlnp | grep 80
 
 # 测试 API
-curl http://localhost/api/health
+curl http://localhost:6666/api/health
 ```
 
 ## ? 故障排查
@@ -323,9 +323,9 @@ docker exec -it tuzhixing-app /bin/bash
 ### 问题 3: 端口被占用
 ```bash
 # 查找占用 80 端口的进程
-sudo lsof -i :80
+sudo lsof -i :6666
 # 或使用其他端口
-docker run -d --name tuzhixing-app -p 8080:80 ...
+docker run -d --name tuzhixing-app -p 8080:6666 ...
 ```
 
 ## ? 快速测试
