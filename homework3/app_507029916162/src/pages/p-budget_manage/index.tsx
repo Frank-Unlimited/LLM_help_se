@@ -64,6 +64,11 @@ const BudgetManagePage: React.FC = () => {
   const hasReceivedRecognitionRef = useRef<boolean>(false);
   const isProcessingExpenseRef = useRef<boolean>(false); // 防止重复解析和保存
   
+  // 文本输入状态
+  const [textInput, setTextInput] = useState<string>('');
+  const [showTextInput, setShowTextInput] = useState<boolean>(false);
+  const showTextInputRef = useRef<boolean>(false); // 用于在回调中获取最新状态
+  
   // 表单状态
   const [formData, setFormData] = useState({
     date: '',
@@ -94,6 +99,11 @@ const BudgetManagePage: React.FC = () => {
     
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // 同步showTextInput状态到ref
+  useEffect(() => {
+    showTextInputRef.current = showTextInput;
+  }, [showTextInput]);
 
   // 组件卸载时清理语音识别器
   useEffect(() => {
@@ -588,7 +598,14 @@ const BudgetManagePage: React.FC = () => {
           const text = res.result?.voice_text_str || '';
           // 显示当前已完成的文本 + 正在识别的临时文本
           const displayText = voiceTextRef.current + text;
-          setVoiceText(displayText); // 仅用于实时显示，不更新ref
+          
+          // 如果输入区域是展开的，实时更新文本输入框
+          if (showTextInputRef.current) {
+            setTextInput(displayText);
+          } else {
+            // 旧模式：更新voiceText用于显示
+            setVoiceText(displayText);
+          }
         };
         
         recognizer.OnSentenceEnd = (res: any) => {
@@ -597,23 +614,41 @@ const BudgetManagePage: React.FC = () => {
           const text = res.result?.voice_text_str || '';
           if (text) {
             voiceTextRef.current += text; // 追加到已完成的文本
-            setVoiceText(voiceTextRef.current); // 更新显示的文本
+            
+            // 如果输入区域是展开的，更新文本输入框
+            if (showTextInputRef.current) {
+              setTextInput(voiceTextRef.current);
+            } else {
+              // 旧模式：更新voiceText用于显示
+              setVoiceText(voiceTextRef.current);
+            }
           }
         };
         
         recognizer.OnRecognitionComplete = async (res: any) => {
           console.log('🎉 识别完成', res);
           setIsRecording(false);
+          setIsWebSocketConnected(false); // 确保清除WebSocket连接状态
           
-          // 识别完成后，调用AI解析（会自动处理状态重置）
+          // 识别完成后，根据输入区域状态决定处理方式
           const finalText = voiceTextRef.current.trim();
           if (finalText) {
-            setVoiceText(finalText); // 确保显示最终文本
-            await handleParseAndAddExpense(finalText);
+            // 如果输入区域是展开的，将识别结果填入文本框，让用户确认或修改后再提交
+            if (showTextInputRef.current) {
+              setTextInput(finalText);
+              voiceTextRef.current = '';
+            } else {
+              // 如果输入区域未展开（旧模式），自动解析并保存
+              setVoiceText(finalText); // 更新显示（虽然旧模式不应该出现，但保留以防万一）
+              await handleParseAndAddExpense(finalText, false);
+            }
           } else {
-            // 如果没有识别到文本，直接关闭状态
-            setShowVoiceStatus(false);
-            setVoiceText('');
+            // 如果没有识别到文本，清空输入框（如果在展开模式下）
+            if (showTextInputRef.current) {
+              setTextInput('');
+            } else {
+              setVoiceText('');
+            }
             voiceTextRef.current = '';
           }
           
@@ -664,6 +699,10 @@ const BudgetManagePage: React.FC = () => {
             console.log('[停止录音] 最终识别文本:', voiceTextRef.current);
           } else {
             console.log('[停止录音] 没有识别到文本');
+            // 如果没有识别到文本，清除状态显示
+            if (!showTextInputRef.current) {
+              setShowVoiceStatus(false);
+            }
           }
         };
         
@@ -678,8 +717,8 @@ const BudgetManagePage: React.FC = () => {
     }
   };
 
-  // 解析语音并添加开销
-  const handleParseAndAddExpense = async (voiceText: string) => {
+  // 解析语音/文本并添加开销（通用函数）
+  const handleParseAndAddExpense = async (inputText: string, isTextInput: boolean = false) => {
     // 防止重复处理
     if (isProcessingExpenseRef.current) {
       console.log('[前端] 已经在处理开销，跳过重复请求');
@@ -693,9 +732,12 @@ const BudgetManagePage: React.FC = () => {
     }
 
     // 检查文本是否为空
-    const text = voiceText.trim();
+    const text = inputText.trim();
     if (!text) {
-      console.log('[前端] 语音文本为空，跳过解析');
+      console.log('[前端] 输入文本为空，跳过解析');
+      if (isTextInput) {
+        alert('请输入开销描述');
+      }
       return;
     }
 
@@ -703,9 +745,9 @@ const BudgetManagePage: React.FC = () => {
     setIsParsingVoice(true);
     
     try {
-      console.log('[前端] 开始解析语音文本:', text);
+      console.log('[前端] 开始解析文本:', text, '来源:', isTextInput ? '文本输入' : '语音识别');
       
-      // 调用后端API解析语音
+      // 调用后端API解析文本
       const parsedExpense = await api.parseExpenseVoice(text);
       
       console.log('[前端] AI解析结果:', parsedExpense);
@@ -731,18 +773,45 @@ const BudgetManagePage: React.FC = () => {
       await loadTripData(tripId);
       
       // 关闭语音识别状态并清空文本
-      setShowVoiceStatus(false);
-      setVoiceText('');
-      voiceTextRef.current = '';
+      if (isTextInput) {
+        // 文本输入：解析完成后关闭输入区域
+        setTextInput('');
+        setShowTextInput(false);
+        showTextInputRef.current = false;
+      } else {
+        // 语音输入：关闭语音状态（如果在展开的输入区域中，文本已在OnRecognitionComplete中填入）
+        // 只在旧模式下清除状态，因为新模式下状态已在OnRecognitionComplete中处理
+        if (!showTextInputRef.current) {
+          setShowVoiceStatus(false);
+          setVoiceText('');
+          voiceTextRef.current = '';
+          setIsWebSocketConnected(false);
+        }
+      }
       
     } catch (err) {
-      console.error('解析语音失败:', err);
+      console.error('解析失败:', err);
       const errMessage = err instanceof Error ? err.message : String(err);
-      alert(`解析语音失败：${errMessage}\n请手动填写开销信息`);
+      alert(`AI解析失败：${errMessage}\n请手动填写开销信息`);
     } finally {
       setIsParsingVoice(false);
       isProcessingExpenseRef.current = false;
     }
+  };
+
+  // 处理文本输入提交
+  const handleTextInputSubmit = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
+    
+    const text = textInput.trim();
+    if (!text) {
+      alert('请输入开销描述');
+      return;
+    }
+    
+    await handleParseAndAddExpense(text, true);
   };
 
   // 处理导出
@@ -1059,42 +1128,154 @@ const BudgetManagePage: React.FC = () => {
                     <i className="fas fa-arrow-left"></i>
                     <span>选择其他行程</span>
                   </button>
-                  {/* 语音输入按钮 - 显眼位置 */}
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      console.log('[按钮点击] 语音按钮被点击', { isRecording, isParsingVoice, hasRecognizer: !!recognizerRef.current });
-                      if (!isParsingVoice) {
-                        handleVoiceInput();
-                      }
-                    }}
-                    disabled={isParsingVoice}
-                    className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2 shadow-lg ${
-                      isRecording
-                        ? 'bg-danger text-white hover:bg-red-600 animate-pulse cursor-pointer active:bg-red-700'
-                        : 'bg-gradient-to-r from-primary to-secondary text-white hover:shadow-xl cursor-pointer'
-                    } ${isParsingVoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title={isRecording ? "点击停止录音" : "语音记录开销"}
-                    style={{ pointerEvents: isParsingVoice ? 'none' : 'auto' }}
-                  >
-                    {isParsingVoice ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        <span>AI解析中...</span>
-                      </>
-                    ) : isRecording ? (
-                      <>
-                        <i className="fas fa-stop text-lg"></i>
-                        <span>停止录音</span>
-                      </>
-                    ) : (
-                      <>
-                        <i className="fas fa-microphone text-lg"></i>
-                        <span>语音记录开销</span>
-                      </>
-                    )}
-                  </button>
+                  
+                  {/* AI记录开销输入区域 - 可展开/收起 */}
+                  {showTextInput ? (
+                    <div className="flex items-center space-x-2 bg-white border-2 border-primary rounded-lg px-3 py-2 shadow-lg">
+                      {/* 左侧：文本输入框和提交按钮 */}
+                      <div className="relative flex-1 min-w-[300px]">
+                        <input
+                          type="text"
+                          value={textInput}
+                          onChange={(e) => setTextInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleTextInputSubmit();
+                            }
+                            if (e.key === 'Escape') {
+                              setShowTextInput(false);
+                              showTextInputRef.current = false;
+                              setTextInput('');
+                              // 如果正在录音，停止录音
+                              if (isRecording && recognizerRef.current) {
+                                stopRecognizer();
+                              }
+                            }
+                          }}
+                          placeholder={isRecording ? '正在识别语音...' : '输入开销描述，如：今天中午在餐厅花了150元'}
+                          className="w-full px-3 py-1 border-0 focus:outline-none focus:ring-0 text-text-primary"
+                          autoFocus
+                          disabled={isParsingVoice}
+                        />
+                        {isRecording && (
+                          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1 text-primary">
+                            <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs">录音中</span>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleTextInputSubmit}
+                        disabled={isParsingVoice || isRecording || !textInput.trim()}
+                        className={`px-4 py-1 rounded transition-colors flex items-center space-x-1 ${
+                          isParsingVoice || isRecording || !textInput.trim()
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-primary text-white hover:bg-blue-600'
+                        }`}
+                        title="提交（Enter）"
+                      >
+                        {isParsingVoice ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                            <span>解析中</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-paper-plane text-sm"></i>
+                            <span>提交</span>
+                          </>
+                        )}
+                      </button>
+                      
+                      {/* 分隔线 */}
+                      <div className="w-px h-6 bg-border-light mx-1"></div>
+                      
+                      {/* 右侧：语音输入按钮 */}
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('[按钮点击] 语音按钮被点击', { isRecording, isParsingVoice, hasRecognizer: !!recognizerRef.current });
+                          if (!isParsingVoice) {
+                            handleVoiceInput();
+                          }
+                        }}
+                        disabled={isParsingVoice}
+                        className={`px-4 py-1 rounded transition-all flex items-center space-x-1 ${
+                          isRecording
+                            ? 'bg-danger text-white hover:bg-red-600 animate-pulse cursor-pointer'
+                            : isParsingVoice
+                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-primary to-secondary text-white hover:shadow-lg cursor-pointer'
+                        }`}
+                        title={isRecording ? "点击停止录音" : "语音输入"}
+                      >
+                        {isParsingVoice ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                            <span>解析中</span>
+                          </>
+                        ) : isRecording ? (
+                          <>
+                            <i className="fas fa-stop text-sm"></i>
+                            <span>停止</span>
+                          </>
+                        ) : (
+                          <>
+                            <i className="fas fa-microphone text-sm"></i>
+                            <span>语音</span>
+                          </>
+                        )}
+                      </button>
+                      
+                      {/* 关闭按钮 */}
+                      <button
+                        onClick={() => {
+                          setShowTextInput(false);
+                          showTextInputRef.current = false;
+                          setTextInput('');
+                          // 如果正在录音，停止录音
+                          if (isRecording && recognizerRef.current) {
+                            stopRecognizer();
+                          }
+                        }}
+                        className="px-2 py-1 text-text-secondary hover:text-text-primary transition-colors"
+                        title="取消（Esc）"
+                        disabled={isParsingVoice}
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setShowTextInput(true);
+                        showTextInputRef.current = true;
+                        setTextInput('');
+                      }}
+                      disabled={isParsingVoice || isRecording}
+                      className={`px-6 py-3 rounded-lg font-semibold transition-all flex items-center space-x-2 shadow-lg ${
+                        isParsingVoice || isRecording
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-primary to-secondary text-white hover:shadow-xl cursor-pointer'
+                      }`}
+                      title="AI记录开销"
+                    >
+                      {isParsingVoice ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          <span>AI解析中...</span>
+                        </>
+                      ) : (
+                        <>
+                          <i className="fas fa-magic text-lg"></i>
+                          <span>AI记录开销</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                  
                   <button 
                     onClick={handleRecordExpenseClick}
                     className="px-6 py-3 bg-primary text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center space-x-2"
@@ -1110,60 +1291,6 @@ const BudgetManagePage: React.FC = () => {
         <section className="p-6">
           <div className="bg-white rounded-xl shadow-card p-6">
             <h2 className="text-xl font-semibold text-text-primary mb-6">预算概览</h2>
-            
-            {/* 语音识别结果显示 */}
-            {(showVoiceStatus || voiceText) && (
-              <div className={`mb-6 p-4 rounded-lg border-2 ${
-                isWebSocketConnected 
-                  ? 'bg-green-50 border-green-300' 
-                  : 'bg-blue-50 border-blue-300'
-              }`}>
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center space-x-2">
-                    {isWebSocketConnected ? (
-                      <i className="fas fa-check-circle text-green-600"></i>
-                    ) : (
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                    )}
-                    <span className="font-medium text-text-primary">
-                      {isRecording ? '正在识别...' : isWebSocketConnected ? '识别完成' : '连接中...'}
-                    </span>
-                  </div>
-                  {voiceText && (
-                    <button
-                      onClick={() => {
-                        setVoiceText('');
-                        voiceTextRef.current = '';
-                      }}
-                      className="text-text-secondary hover:text-text-primary"
-                      title="清空"
-                    >
-                      <i className="fas fa-times"></i>
-                    </button>
-                  )}
-                </div>
-                {voiceText ? (
-                  <div className="mt-2">
-                    <p className="text-sm text-text-secondary mb-1">识别结果：</p>
-                    <p className="text-base text-text-primary font-medium bg-white p-3 rounded border border-border-light">
-                      {voiceText}
-                    </p>
-                    {isParsingVoice && (
-                      <div className="mt-2 flex items-center space-x-2 text-sm text-primary">
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-primary"></div>
-                        <span>AI正在解析开销信息...</span>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-text-secondary mt-2">
-                    {isWebSocketConnected 
-                      ? '请开始说话，系统正在识别您的语音...'
-                      : '正在连接语音识别服务，请稍候...'}
-                  </p>
-                )}
-              </div>
-            )}
             
             <div className="grid md:grid-cols-3 gap-6 mb-8">
               {/* 总预算 */}
@@ -1471,72 +1598,7 @@ const BudgetManagePage: React.FC = () => {
                 <i className="fas fa-times"></i>
               </button>
             </div>
-            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">
-              {/* 语音输入按钮 */}
-              <div className="mb-4 pb-4 border-b border-border-light">
-                <label className="block text-sm font-medium text-text-primary mb-2">
-                  <i className="fas fa-microphone mr-2 text-primary"></i>
-                  语音输入
-                </label>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    console.log('[弹窗按钮点击] 语音按钮被点击', { isRecording, isParsingVoice, hasRecognizer: !!recognizerRef.current });
-                    if (!isParsingVoice) {
-                      handleVoiceInput();
-                    }
-                  }}
-                  disabled={isParsingVoice}
-                  className={`w-full px-4 py-3 rounded-lg font-medium transition-all flex items-center justify-center space-x-2 ${
-                    isRecording
-                      ? 'bg-danger text-white hover:bg-red-600 cursor-pointer active:bg-red-700'
-                      : 'bg-primary text-white hover:bg-blue-600 cursor-pointer'
-                  } ${isParsingVoice ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  style={{ pointerEvents: isParsingVoice ? 'none' : 'auto' }}
-                >
-                  {isParsingVoice ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>AI解析中...</span>
-                    </>
-                  ) : isRecording ? (
-                    <>
-                      <i className="fas fa-stop"></i>
-                      <span>停止录音</span>
-                    </>
-                  ) : (
-                    <>
-                      <i className="fas fa-microphone"></i>
-                      <span>点击说话记录开销</span>
-                    </>
-                  )}
-                </button>
-                
-                {/* 语音识别状态 */}
-                {showVoiceStatus && (
-                  <div className={`mt-3 p-3 rounded-lg text-sm ${
-                    isWebSocketConnected
-                      ? 'bg-green-50 border border-green-200'
-                      : 'bg-blue-50 border border-blue-200'
-                  }`}>
-                    {!isWebSocketConnected ? (
-                      <div className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600"></div>
-                        <span className="text-blue-700">正在连接识别服务...</span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <i className="fas fa-check-circle text-green-600"></i>
-                        <span className="text-green-700">
-                          {isRecording ? '正在聆听，请说话...' : '连接成功，可以开始说话'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+            <form onSubmit={handleFormSubmit} className="p-6 space-y-4">            
               <div>
                 <label htmlFor="expense-date" className="block text-sm font-medium text-text-primary mb-2">日期</label>
                 <input 

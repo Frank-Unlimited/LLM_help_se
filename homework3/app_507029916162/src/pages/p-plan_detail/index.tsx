@@ -522,6 +522,27 @@ const PlanDetailPage: React.FC = () => {
 
       {/* 主内容区 */}
       <main className={`ml-0 md:ml-60 mt-16 min-h-screen transition-all duration-300 ${isEditMode ? styles.editMode : ''}`}>
+        {/* 行程封面图片 */}
+        {!isLoading && tripData && tripData.imageUrl && (
+          <div className="relative w-full h-64 md:h-96 overflow-hidden">
+            <img
+              src={tripData.imageUrl}
+              alt={tripData.tripName || '行程封面'}
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                target.src = 'https://s.coze.cn/image/Wfu3diMcxMM/';
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+              <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+                <h2 className="text-2xl md:text-3xl font-bold mb-2">{tripData.tripName}</h2>
+                <p className="text-sm md:text-base text-white/90">{tripData.destination}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 页面头部 */}
         <div className="bg-white border-b border-border-light px-6 py-4">
           <div className="flex items-center justify-between">
