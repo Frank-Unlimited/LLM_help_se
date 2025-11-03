@@ -50,7 +50,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 ```bash
 docker run -d \
   --name tuzhixing-app \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -70,7 +70,7 @@ docker ps
 docker logs tuzhixing-app
 
 # 测试健康检查
-curl http://localhost:6666/api/health
+curl http://localhost/api/health
 ```
 
 ### 6. 配置安全组（阿里云 ECS）
@@ -124,7 +124,7 @@ docker pull $REGISTRY/$NAMESPACE/$IMAGE_NAME:latest
 echo "Starting container..."
 docker run -d \
   --name $CONTAINER_NAME \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   $REGISTRY/$NAMESPACE/$IMAGE_NAME:latest
 
@@ -165,7 +165,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 # 运行新容器（使用默认启动命令）
 docker run -d \
   --name tuzhixing-app \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -200,7 +200,7 @@ docker exec -it tuzhixing-app /bin/bash
    ```bash
    docker run -d \
      --name tuzhixing-app \
-     -p 6666:6666 \
+     -p 80:80 \
      -e COZE_API_KEY=your_key \
      -e OPENAI_API_KEY=your_key \
      --restart unless-stopped \
@@ -211,7 +211,7 @@ docker exec -it tuzhixing-app /bin/bash
    ```bash
    docker run -d \
      --name tuzhixing-app \
-     -p 6666:6666 \
+     -p 80:80 \
      -v /path/to/data:/app/backend/travel_planner.db \
      --restart unless-stopped \
      crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
@@ -273,7 +273,7 @@ docker exec -it tuzhixing-app /bin/bash
        ssl_ciphers HIGH:!aNULL:!MD5;
    
        location / {
-           proxy_pass http://127.0.0.1:6666;
+           proxy_pass http://127.0.0.1:80;
            proxy_set_header Host $host;
            proxy_set_header X-Real-IP $remote_addr;
            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -301,7 +301,7 @@ netstat -tlnp | grep 80
 ss -tlnp | grep 80
 
 # 测试 API
-curl http://localhost:6666/api/health
+curl http://localhost/api/health
 ```
 
 ## ? 故障排查
@@ -322,19 +322,19 @@ docker exec -it tuzhixing-app /bin/bash
 
 ### 问题 3: 端口被占用
 ```bash
-# 查找占用 6666 端口的进程
-sudo lsof -i :6666
+# 查找占用 80 端口的进程
+sudo lsof -i :80
 # 或使用其他端口
-docker run -d --name tuzhixing-app -p 8080:6666 ...
+docker run -d --name tuzhixing-app -p 8080:80 ...
 ```
 
 ## ? 快速测试
 
 部署完成后，在浏览器中测试：
 
-1. **首页**: `http://your-server-ip:6666`
-2. **API 文档**: `http://your-server-ip:6666/docs`
-3. **健康检查**: `http://your-server-ip:6666/api/health`
+1. **首页**: `http://your-server-ip`
+2. **API 文档**: `http://your-server-ip/docs`
+3. **健康检查**: `http://your-server-ip/api/health`
 
 如果都能正常访问，说明部署成功！
 

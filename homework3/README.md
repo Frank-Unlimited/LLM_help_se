@@ -32,7 +32,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 ```bash
 docker run -d \
   --name tuzhixing-app \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -45,7 +45,7 @@ docker run -d \
   --memory="350m" \
   --memory-swap="400m" \
   --cpus="0.5" \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -67,8 +67,8 @@ docker stats tuzhixing-app
 
 在浏览器中访问：
 
-- **本地服务器**：`http://localhost:6666`
-- **远程服务器**：`http://your-server-ip:6666`
+- **本地服务器**：`http://localhost`
+- **远程服务器**：`http://your-server-ip`
 
 > **注意**：如果需要使用语音输入功能，必须使用 HTTPS 或 localhost。详情请参考 [`app_507029916162/DEPLOY_TO_SERVER.md`](./app_507029916162/DEPLOY_TO_SERVER.md#-https-配置语音功能必需)
 
@@ -78,7 +78,7 @@ docker stats tuzhixing-app
 
 ### 1. 打开配置管理窗口
 
-1. 在浏览器中访问应用首页（`http://localhost:6666` 或 `http://your-server-ip:6666`）
+1. 在浏览器中访问应用首页（`http://localhost` 或 `http://your-server-ip`）
 2. 点击页面右上角的 **"API 配置"** 按钮（齿轮图标）
 
 ### 2. 填写配置信息
@@ -142,7 +142,7 @@ docker stop tuzhixing-app
 docker rm tuzhixing-app
 docker run -d \
   --name tuzhixing-app \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -169,7 +169,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 # 2. 运行容器
 docker run -d \
   --name tuzhixing-app \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 
@@ -179,7 +179,7 @@ sleep 15
 # 4. 查看日志确认启动成功
 docker logs tuzhixing-app
 
-# 5. 在浏览器访问 http://localhost:6666
+# 5. 在浏览器访问 http://localhost
 # 6. 点击右上角 "API 配置" 按钮
 # 7. 填写所有 API Keys
 # 8. 点击 "一键保存所有配置"
@@ -201,7 +201,7 @@ docker restart tuzhixing-app
 **检查步骤**：
 1. 确认容器正在运行：`docker ps | grep tuzhixing-app`
 2. 确认端口映射正确：`docker port tuzhixing-app`
-3. 检查防火墙设置（服务器需开放 6666 端口）
+3. 检查防火墙设置（服务器需开放 80 端口）
 4. 查看容器日志：`docker logs tuzhixing-app`
 
 ### Q2: 语音输入功能无法使用
@@ -278,7 +278,7 @@ docker stop tuzhixing-app
 docker rm tuzhixing-app
 docker run -d \
   --name tuzhixing-app \
-  -p 6666:6666 \
+  -p 80:80 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
