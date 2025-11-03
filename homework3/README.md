@@ -4,10 +4,6 @@
 
 [LLM_help_se/homework3 at main · Frank-Unlimited/LLM_help_se](https://github.com/Frank-Unlimited/LLM_help_se/tree/main/homework3)
 
-
-
-
-
 ## 📦 Docker 镜像部署指南
 
 本指南将帮助助教快速部署并测试项目。
@@ -36,7 +32,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 ```bash
 docker run -d \
   --name tuzhixing-app \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -49,7 +45,7 @@ docker run -d \
   --memory="350m" \
   --memory-swap="400m" \
   --cpus="0.5" \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -71,8 +67,8 @@ docker stats tuzhixing-app
 
 在浏览器中访问：
 
-- **本地服务器**：`http://localhost`
-- **远程服务器**：`http://your-server-ip`
+- **本地服务器**：`http://localhost:6666`
+- **远程服务器**：`http://your-server-ip:6666`
 
 > **注意**：如果需要使用语音输入功能，必须使用 HTTPS 或 localhost。详情请参考 [`app_507029916162/DEPLOY_TO_SERVER.md`](./app_507029916162/DEPLOY_TO_SERVER.md#-https-配置语音功能必需)
 
@@ -146,7 +142,7 @@ docker stop tuzhixing-app
 docker rm tuzhixing-app
 docker run -d \
   --name tuzhixing-app \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -173,7 +169,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 # 2. 运行容器
 docker run -d \
   --name tuzhixing-app \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 
@@ -282,7 +278,7 @@ docker stop tuzhixing-app
 docker rm tuzhixing-app
 docker run -d \
   --name tuzhixing-app \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```

@@ -50,7 +50,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 ```bash
 docker run -d \
   --name tuzhixing-app \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -124,7 +124,7 @@ docker pull $REGISTRY/$NAMESPACE/$IMAGE_NAME:latest
 echo "Starting container..."
 docker run -d \
   --name $CONTAINER_NAME \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   $REGISTRY/$NAMESPACE/$IMAGE_NAME:latest
 
@@ -165,7 +165,7 @@ docker pull crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105
 # 运行新容器（使用默认启动命令）
 docker run -d \
   --name tuzhixing-app \
-  -p 80:80 \
+  -p 6666:6666 \
   --restart unless-stopped \
   crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
 ```
@@ -200,7 +200,7 @@ docker exec -it tuzhixing-app /bin/bash
    ```bash
    docker run -d \
      --name tuzhixing-app \
-     -p 80:80 \
+     -p 6666:6666 \
      -e COZE_API_KEY=your_key \
      -e OPENAI_API_KEY=your_key \
      --restart unless-stopped \
@@ -211,7 +211,7 @@ docker exec -it tuzhixing-app /bin/bash
    ```bash
    docker run -d \
      --name tuzhixing-app \
-     -p 80:80 \
+     -p 6666:6666 \
      -v /path/to/data:/app/backend/travel_planner.db \
      --restart unless-stopped \
      crpi-925djdtsud86yqkr.cn-hangzhou.personal.cr.aliyuncs.com/hhc510105200301150090/hhc:latest
@@ -332,9 +332,9 @@ docker run -d --name tuzhixing-app -p 8080:80 ...
 
 部署完成后，在浏览器中测试：
 
-1. **首页**: `http://your-server-ip`
-2. **API 文档**: `http://your-server-ip/docs`
-3. **健康检查**: `http://your-server-ip/api/health`
+1. **首页**: `http://your-server-ip:6666`
+2. **API 文档**: `http://your-server-ip:6666/docs`
+3. **健康检查**: `http://your-server-ip:6666/api/health`
 
 如果都能正常访问，说明部署成功！
 
