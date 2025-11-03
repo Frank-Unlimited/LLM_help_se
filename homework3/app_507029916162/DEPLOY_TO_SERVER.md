@@ -322,7 +322,7 @@ docker exec -it tuzhixing-app /bin/bash
 
 ### 问题 3: 端口被占用
 ```bash
-# 查找占用 80 端口的进程
+# 查找占用 6666 端口的进程
 sudo lsof -i :6666
 # 或使用其他端口
 docker run -d --name tuzhixing-app -p 8080:6666 ...
