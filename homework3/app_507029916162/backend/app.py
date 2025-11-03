@@ -2,8 +2,9 @@
 """
 Backend API for TuZhiXing Travel Planning Platform
 """
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import Optional
 from datetime import datetime, timedelta
 import uuid
@@ -11,6 +12,7 @@ import os
 import re
 import random
 import string
+import json
 
 # Load environment variables from .env file if python-dotenv is available
 try:
@@ -43,7 +45,7 @@ from models import (
 from database import get_db
 from ai_service import generate_trip_with_llm, parse_expense_from_voice
 
-# Create FastAPI app
+# Create FastAPI app with UTF-8 JSON encoding
 app = FastAPI(
     title="TuZhiXing API",
     description="Intelligent Travel Planning Platform Backend Service",
@@ -63,6 +65,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add middleware to ensure UTF-8 charset in Content-Type header
+@app.middleware("http")
+async def add_charset_to_response(request: Request, call_next):
+    """Ensure all JSON responses include charset=utf-8 in Content-Type header"""
+    response = await call_next(request)
+    
+    # Check if response is JSON
+    content_type = response.headers.get("content-type", "")
+    if "application/json" in content_type and "charset" not in content_type:
+        # Add charset to Content-Type header
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    
+    return response
 
 @app.get("/")
 async def root():
