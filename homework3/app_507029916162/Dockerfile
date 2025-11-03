@@ -1,14 +1,14 @@
-# ¶à½×¶Î¹¹½¨Dockerfile
-# ½×¶Î1: ¹¹½¨Ç°¶Ë
+# å¤šé˜¶æ®µæ„å»ºDockerfile
+# é˜¶æ®µ1: æ„å»ºå‰ç«¯
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# ÉèÖÃ·Ç½»»¥Ê½»·¾³±äÁ¿ÒÔ±ÜÃâ¹¹½¨¹ı³ÌÖĞµÄ½»»¥ÌáÊ¾
+# è®¾ç½®éäº¤äº’å¼ç¯å¢ƒå˜é‡ä»¥é¿å…æ„å»ºè¿‡ç¨‹ä¸­çš„äº¤äº’æç¤º
 ENV CI=true
-# ×¢Òâ£º²»ÒªÉèÖÃ NODE_ENV=production£¬ÒòÎªÎÒÃÇĞèÒª°²×° devDependencies ½øĞĞ¹¹½¨
+# æ³¨æ„ï¼šä¸è¦è®¾ç½® NODE_ENV=productionï¼Œå› ä¸ºæˆ‘ä»¬éœ€è¦å®‰è£… devDependencies è¿›è¡Œæ„å»º
 
-# ¸´ÖÆÇ°¶ËÒÀÀµÎÄ¼ş
+# å¤åˆ¶å‰ç«¯ä¾èµ–æ–‡ä»¶
 COPY package*.json ./
 COPY vite.config.ts ./
 COPY tsconfig*.json ./
@@ -16,37 +16,37 @@ COPY postcss.config.js ./
 COPY tailwind.config.js ./
 COPY eslint.config.js ./
 
-# °²×°Ç°¶ËÒÀÀµ£¨°üÀ¨ devDependencies£¬¹¹½¨ĞèÒª£©
+# å®‰è£…å‰ç«¯ä¾èµ–ï¼ˆåŒ…æ‹¬ devDependenciesï¼Œæ„å»ºéœ€è¦ï¼‰
 RUN npm install --legacy-peer-deps
 
-# ¸´ÖÆÇ°¶ËÔ´´úÂë
+# å¤åˆ¶å‰ç«¯æºä»£ç 
 COPY src ./src
 COPY index.html ./
-# ¸´ÖÆ app Ä¿Â¼£¨°üº¬ÓïÒôÊ¶±ğÏà¹ØÎÄ¼ş£©
+# å¤åˆ¶ app ç›®å½•ï¼ˆåŒ…å«è¯­éŸ³è¯†åˆ«ç›¸å…³æ–‡ä»¶ï¼‰
 COPY app ./app
-# ¸´ÖÆ examples Ä¿Â¼£¨app/speechrecognizer.js ÒÀÀµ examples/lib/cryptojs.js£©
+# å¤åˆ¶ examples ç›®å½•ï¼ˆapp/speechrecognizer.js ä¾èµ– examples/lib/cryptojs.jsï¼‰
 COPY examples ./examples
 
-# ¹¹½¨Ç°¶Ë£¨Ìø¹ı TypeScript ÀàĞÍ¼ì²é£¬½ö½øĞĞ¹¹½¨£©
-# Vite »á´¦Àí TypeScript ×ªÒë£¬ËùÒÔ²»ĞèÒªÏÈÔËĞĞ tsc
-# Ê¹ÓÃ npx È·±£ÄÜÕÒµ½ vite ÃüÁî£¨vite ÔÚ devDependencies ÖĞ£©
+# æ„å»ºå‰ç«¯ï¼ˆè·³è¿‡ TypeScript ç±»å‹æ£€æŸ¥ï¼Œä»…è¿›è¡Œæ„å»ºï¼‰
+# Vite ä¼šå¤„ç† TypeScript è½¬è¯‘ï¼Œæ‰€ä»¥ä¸éœ€è¦å…ˆè¿è¡Œ tsc
+# ä½¿ç”¨ npx ç¡®ä¿èƒ½æ‰¾åˆ° vite å‘½ä»¤ï¼ˆvite åœ¨ devDependencies ä¸­ï¼‰
 RUN npx vite build
 
-# ½×¶Î2: Pythonºó¶ËÔËĞĞ»·¾³
-# Ê¹ÓÃ alpine °æ±¾ÒÔ¼õÉÙ¾µÏñ´óĞ¡ºÍÄÚ´æÕ¼ÓÃ£¨ÊÊºÏµÍÄÚ´æ·şÎñÆ÷£©
+# é˜¶æ®µ2: Pythonåç«¯è¿è¡Œç¯å¢ƒ
+# ä½¿ç”¨ alpine ç‰ˆæœ¬ä»¥å‡å°‘é•œåƒå¤§å°å’Œå†…å­˜å ç”¨ï¼ˆé€‚åˆä½å†…å­˜æœåŠ¡å™¨ï¼‰
 FROM python:3.10-alpine
 
 WORKDIR /app
 
-# ÉèÖÃ±àÂë»·¾³±äÁ¿£¬È·±£ÕıÈ·´¦ÀíÎÄ¼ş
+# è®¾ç½®ç¼–ç ç¯å¢ƒå˜é‡ï¼Œç¡®ä¿æ­£ç¡®å¤„ç†æ–‡ä»¶
 ENV PYTHONIOENCODING=utf-8
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-# ÓÅ»¯ Python ÄÚ´æÊ¹ÓÃ
+# ä¼˜åŒ– Python å†…å­˜ä½¿ç”¨
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
-# °²×°×îĞ¡ÏµÍ³ÒÀÀµ£¨alpine Ê¹ÓÃ apk£¬±È apt ¸üÇáÁ¿£©
+# å®‰è£…æœ€å°ç³»ç»Ÿä¾èµ–ï¼ˆalpine ä½¿ç”¨ apkï¼Œæ¯” apt æ›´è½»é‡ï¼‰
 RUN apk add --no-cache \
     nginx \
     supervisor \
@@ -54,35 +54,35 @@ RUN apk add --no-cache \
     && mkdir -p /etc/supervisor/conf.d \
     && mkdir -p /var/log/supervisor
 
-# ¸´ÖÆºó¶ËÒÀÀµÎÄ¼ş
+# å¤åˆ¶åç«¯ä¾èµ–æ–‡ä»¶
 COPY backend/requirements.txt ./backend/
 
-# °²×°PythonÒÀÀµ
-# Ê¹ÓÃ Python -m pip È·±£Ê¹ÓÃÕıÈ·µÄ Python »·¾³ºÍ±àÂë
+# å®‰è£…Pythonä¾èµ–
+# ä½¿ç”¨ Python -m pip ç¡®ä¿ä½¿ç”¨æ­£ç¡®çš„ Python ç¯å¢ƒå’Œç¼–ç 
 RUN python -m pip install --upgrade pip setuptools wheel && \
     python -m pip install --no-cache-dir -r backend/requirements.txt && \
     python -m pip install --no-cache-dir python-dotenv
 
-# ¸´ÖÆºó¶Ë´úÂë
+# å¤åˆ¶åç«¯ä»£ç 
 COPY backend ./backend
 
-# ´Ó¹¹½¨½×¶Î¸´ÖÆÇ°¶Ë¹¹½¨²úÎï
+# ä»æ„å»ºé˜¶æ®µå¤åˆ¶å‰ç«¯æ„å»ºäº§ç‰©
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
-# ´´½¨nginxÅäÖÃ£¨alpine °æ±¾Ê¹ÓÃ /etc/nginx/nginx.conf£©
-RUN printf 'events {\n    worker_connections 512;\n}\nhttp {\n    include /etc/nginx/mime.types;\n    default_type application/octet-stream;\n    sendfile on;\n    keepalive_timeout 65;\n    gzip on;\n    gzip_types text/plain text/css application/json application/javascript;\n    server {\n        listen 6666;\n        server_name _;\n        root /app/frontend/dist;\n        index index.html;\n        location / {\n            try_files $uri $uri/ /index.html;\n        }\n        location /api {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Upgrade $http_upgrade;\n            proxy_set_header Connection "upgrade";\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n            proxy_set_header X-Forwarded-Proto $scheme;\n        }\n        location /docs {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /redoc {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /openapi.json {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n    }\n}\n' > /etc/nginx/nginx.conf
+# åˆ›å»ºnginxé…ç½®ï¼ˆalpine ç‰ˆæœ¬ä½¿ç”¨ /etc/nginx/nginx.confï¼‰
+RUN printf 'events {\n    worker_connections 512;\n}\nhttp {\n    include /etc/nginx/mime.types;\n    default_type application/octet-stream;\n    charset utf-8;\n    sendfile on;\n    keepalive_timeout 65;\n    gzip on;\n    gzip_types text/plain text/css application/json application/javascript text/html application/javascript text/xml application/xml;\n    server {\n        listen 6666;\n        server_name _;\n        root /app/frontend/dist;\n        index index.html;\n        location / {\n            try_files $uri $uri/ /index.html;\n            charset utf-8;\n        }\n        location /api {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Upgrade $http_upgrade;\n            proxy_set_header Connection "upgrade";\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n            proxy_set_header X-Forwarded-Proto $scheme;\n            proxy_buffering off;\n            charset utf-8;\n        }\n        location /docs {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /redoc {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n        location /openapi.json {\n            proxy_pass http://127.0.0.1:3000;\n            proxy_http_version 1.1;\n            proxy_set_header Host $host;\n            proxy_set_header X-Real-IP $remote_addr;\n            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n        }\n    }\n}\n' > /etc/nginx/nginx.conf
 
-# ´´½¨supervisorÅäÖÃ£¨Ê¹ÓÃ printf È·±£ÕıÈ·µÄ»»ĞĞ·û£©
-# ÓÅ»¯£ºµ¥ worker + Á¬½ÓÏŞÖÆ + ³¬Ê±ÉèÖÃ£¬¼õÉÙÄÚ´æÕ¼ÓÃ
+# åˆ›å»ºsupervisoré…ç½®ï¼ˆä½¿ç”¨ printf ç¡®ä¿æ­£ç¡®çš„æ¢è¡Œç¬¦ï¼‰
+# ä¼˜åŒ–ï¼šå• worker + è¿æ¥é™åˆ¶ + è¶…æ—¶è®¾ç½®ï¼Œå‡å°‘å†…å­˜å ç”¨
 RUN printf '[supervisord]\nnodaemon=true\nlogfile=/var/log/supervisor/supervisord.log\npidfile=/var/run/supervisord.pid\n\n[program:backend]\ncommand=uvicorn app:app --host 0.0.0.0 --port 3000 --workers 1 --limit-concurrency 20 --timeout-keep-alive 30\ndirectory=/app/backend\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/backend.err.log\nstdout_logfile=/var/log/supervisor/backend.out.log\nenvironment=PYTHONUNBUFFERED=1\nstopasgroup=true\nkillasgroup=true\n\n[program:nginx]\ncommand=nginx -g "daemon off; worker_processes 1;"\nautostart=true\nautorestart=true\nstderr_logfile=/var/log/supervisor/nginx.err.log\nstdout_logfile=/var/log/supervisor/nginx.out.log\nstopasgroup=true\nkillasgroup=true\n' > /etc/supervisor/conf.d/supervisord.conf
 
-# ´´½¨Æô¶¯½Å±¾£¨Ê¹ÓÃ printf È·±£ÕıÈ·µÄ»»ĞĞ·û£¬alpine Ê¹ÓÃ /bin/sh£©
+# åˆ›å»ºå¯åŠ¨è„šæœ¬ï¼ˆä½¿ç”¨ printf ç¡®ä¿æ­£ç¡®çš„æ¢è¡Œç¬¦ï¼Œalpine ä½¿ç”¨ /bin/shï¼‰
 RUN printf '#!/bin/sh\nset -e\necho "Starting services (low memory optimized)..."\nexec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf\n' > /app/start.sh && \
     chmod +x /app/start.sh
 
-# ±©Â¶¶Ë¿Ú
+# æš´éœ²ç«¯å£
 EXPOSE 6666
 
-# Æô¶¯·şÎñ
+# å¯åŠ¨æœåŠ¡
 CMD ["/app/start.sh"]
 
